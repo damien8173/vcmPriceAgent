@@ -1,0 +1,4 @@
+# Test/dev tooling on top of the runtime dependencies. Not installed in the
+# Docker image (see Dockerfile) -- only needed to run the test suite.
+-r requirements.txt
+pytest>=8.0,<9.0

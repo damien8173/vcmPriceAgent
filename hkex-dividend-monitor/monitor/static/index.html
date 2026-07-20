@@ -1,0 +1,2644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HKEX Dividend Monitor</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --border: #e2e5ea;
+    --text: #1a1d23;
+    --text-dim: #6b7280;
+    --accent: #0f766e;
+    --accent-dim: #ccfbf1;
+    --danger: #dc2626;
+    --danger-dim: #fee2e2;
+    --warn: #b45309;
+    --warn-dim: #fef3c7;
+    --ok: #16a34a;
+    --ok-dim: #dcfce7;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --card: #1c1f26;
+      --border: #2b2f38;
+      --text: #eef0f3;
+      --text-dim: #9aa1ad;
+      --accent: #2dd4bf;
+      --accent-dim: #0f3d3a;
+      --danger: #f87171;
+      --danger-dim: #3f1d1d;
+      --warn: #fbbf24;
+      --warn-dim: #3f2e0a;
+      --ok: #4ade80;
+      --ok-dim: #0f2f1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 650;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex: none;
+  }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--danger); }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+    overflow-x: auto;
+  }
+  nav.tabs button {
+    appearance: none;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-weight: 550;
+    padding: 12px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  nav.tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 14px 0;
+    font-weight: 650;
+  }
+  .card p.hint {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: -8px 0 14px 0;
+  }
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 18px;
+    font-size: 14px;
+    border: 1px solid transparent;
+  }
+  .banner.warn { background: var(--warn-dim); color: var(--warn); border-color: var(--warn); }
+  .banner.ok { background: var(--ok-dim); color: var(--ok); border-color: var(--ok); }
+  .banner.bad { background: var(--danger-dim); color: var(--danger); border-color: var(--danger); }
+  .banner a { color: inherit; font-weight: 650; }
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13.5px;
+  }
+  .status-item .label { color: var(--text-dim); }
+  .status-item .value { font-weight: 600; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table a { color: var(--accent); }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+  .row-actions button { font-size: 12.5px; }
+  .empty {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    padding: 14px 0;
+    text-align: center;
+  }
+  form.inline {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-top: 14px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12.5px; color: var(--text-dim); font-weight: 600; }
+  input, select {
+    font: inherit;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    min-width: 0;
+  }
+  input:focus, select:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    font: inherit;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.secondary { background: var(--card); color: var(--accent); }
+  button.danger { background: var(--card); color: var(--danger); border-color: var(--danger); }
+  button:disabled { opacity: .55; cursor: default; }
+  .msg { font-size: 13px; margin-top: 8px; }
+  .msg.error { color: var(--danger); }
+  .msg.success { color: var(--ok); }
+  .alert-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-item .title { font-weight: 650; }
+  .alert-item .meta { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
+  .alert-item a { color: var(--accent); }
+
+  /* Activity log */
+  #activity-feed {
+    height: 320px;
+    overflow-y: auto;
+    font-size: 13px;
+  }
+  .activity-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-row .activity-time { color: var(--text-dim); flex: none; min-width: 60px; }
+  .activity-row .activity-source { color: var(--text-dim); flex: none; }
+  .activity-row .activity-ticker { color: var(--accent); font-weight: 650; flex: none; }
+  .activity-row .activity-message { flex: 1 1 auto; min-width: 200px; }
+  .lvl-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    flex: none;
+  }
+  .lvl-badge.lvl-debug { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+  .lvl-badge.lvl-info { background: var(--accent-dim); color: var(--accent); }
+  .lvl-badge.lvl-warn { background: var(--warn-dim); color: var(--warn); }
+  .lvl-badge.lvl-error { background: var(--danger-dim); color: var(--danger); }
+  fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px 16px; margin: 0 0 16px 0; }
+  legend { font-size: 13px; font-weight: 650; padding: 0 6px; }
+  .settings-grid { display: grid; gap: 12px; }
+  .settings-grid .field { width: 100%; }
+  .settings-grid input { width: 100%; }
+  .settings-note { font-size: 12.5px; color: var(--text-dim); }
+
+  /* Dividend Watchlist */
+  .band-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 650;
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .band-pill.High { background: var(--ok-dim); color: var(--ok); }
+  .band-pill.Medium { background: var(--warn-dim); color: var(--warn); }
+  .band-pill.Low { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
+  /* Official/Derived/Estimated provenance chip -- every reason and detail
+     field in the Dividend Watchlist carries one of these so an Estimated
+     projection can never be mistaken for an Official filing fact. */
+  .provenance-chip {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-right: 6px;
+    flex: none;
+  }
+  .provenance-chip.Official { background: var(--ok-dim); color: var(--ok); }
+  .provenance-chip.Derived { background: var(--accent-dim); color: var(--accent); }
+  .provenance-chip.Estimated { background: var(--warn-dim); color: var(--warn); }
+  .dw-expand-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+  .dw-detail-row td { background: var(--bg); padding: 14px 16px; }
+  .dw-reason-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; flex-wrap: wrap; }
+  .dw-reason-row:last-child { border-bottom: none; }
+  .dw-reason-evidence { color: var(--text-dim); font-size: 12.5px; }
+  .dw-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .dw-detail-grid .label { color: var(--text-dim); font-size: 12.5px; margin-bottom: 4px; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+
+  /* Chat */
+  #chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 4px 2px 8px;
+  }
+  .bubble {
+    max-width: 80%;
+    padding: 10px 13px;
+    border-radius: 12px;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .bubble.assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+  .bubble.thinking { align-self: flex-start; color: var(--text-dim); font-style: italic; background: none; border: none; padding: 4px 6px; }
+  .bubble strong { font-weight: 650; }
+  .tool-chip {
+    display: inline-block;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin: 4px 4px 0 0;
+  }
+  .bubble .feedback-flag {
+    display: block;
+    margin: 8px 0 0 auto;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-dim);
+  }
+  .bubble .feedback-flag:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+  .bubble .feedback-flag:disabled { opacity: .7; }
+  .sources-block {
+    max-width: 100%;
+    margin-top: 2px;
+    padding: 10px 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    font-size: 14px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .sources-label { font-weight: 650; color: var(--text-dim); margin-bottom: 6px; }
+  .source-item { padding: 3px 0; }
+  .source-item a { color: var(--accent); text-decoration: none; }
+  .source-item a:hover { text-decoration: underline; }
+  .source-date { color: var(--text-dim); }
+  .sources-block table th, .sources-block table td { padding: 6px 8px; font-size: 14px; }
+  #chat-form { display: flex; gap: 8px; margin-top: 14px; }
+  #chat-input { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HKEX Dividend Monitor</h1>
+  <span class="status-pill"><span class="dot" id="header-dot"></span><span id="header-text">Checking…</span></span>
+</header>
+
+<nav class="tabs">
+  <button data-tab="dashboard" class="active">Dashboard</button>
+  <button data-tab="watchlist">Watchlist</button>
+  <button data-tab="dividend-watchlist">Dividend Watchlist</button>
+  <button data-tab="dividends">Dividends</button>
+  <button data-tab="board-meetings">Board Meetings</button>
+  <button data-tab="hkex-settlement">HKEX Settlement</button>
+  <button data-tab="sgx-settlement">SGX Settlement</button>
+  <button data-tab="eurex-settlement">Eurex</button>
+  <button data-tab="chat">Chat</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <section class="tab-panel active" id="tab-dashboard">
+    <div id="setup-banner"></div>
+
+    <div class="card">
+      <h2>System status</h2>
+      <div class="status-grid" id="status-grid"></div>
+      <div style="margin-top:14px;">
+        <button class="secondary" id="test-alert-btn" type="button">Send test alert</button>
+        <span class="msg" id="test-alert-msg"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Activity log</h2>
+        <select id="activity-level">
+          <option value="">All activity</option>
+          <option value="info">Info and above</option>
+          <option value="warn">Warnings and errors</option>
+        </select>
+      </div>
+      <p class="hint">Live feed of what the monitor is doing right now — HKEX refreshes, filings detected, AI checks, notifications, retries. Updates every 5 seconds while this tab is open. Hover to pause.</p>
+      <div id="activity-feed"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent alerts</h2>
+      <div id="alerts-list"><div class="empty">Loading…</div></div>
+    </div>
+  </section>
+
+  <!-- WATCHLIST -->
+  <section class="tab-panel" id="tab-watchlist">
+    <div class="card">
+      <h2>Watch targets</h2>
+      <p class="hint">An alert fires when a ticker files something on <em>exactly</em> its target date (Hong Kong time).</p>
+      <table>
+        <thead><tr><th>Ticker</th><th>Target date</th><th>Status</th><th>Progress</th><th></th></tr></thead>
+        <tbody id="targets-body"></tbody>
+      </table>
+      <div id="targets-empty" class="empty" style="display:none;">No targets yet — add one below.</div>
+
+      <form class="inline" id="add-target-form">
+        <div class="field">
+          <label for="add-ticker">Ticker</label>
+          <input id="add-ticker" placeholder="e.g. 700" required>
+          <span class="settings-note" id="add-ticker-preview"></span>
+        </div>
+        <div class="field">
+          <label for="add-date">Target date</label>
+          <input id="add-date" type="date" required>
+        </div>
+        <button type="submit">Add target</button>
+      </form>
+      <div class="msg" id="add-target-msg"></div>
+    </div>
+  </section>
+
+  <!-- DIVIDEND WATCHLIST -->
+  <section class="tab-panel" id="tab-dividend-watchlist">
+    <div class="card">
+      <h2>Tracked tickers</h2>
+      <p class="hint">Today's HKEX Dividend Watchlist only ranks tickers you add here (plus anything on your alert Watchlist above) — each one is searched directly on HKEX, not market-wide, so generation stays fast regardless of how many companies HKEX lists.</p>
+      <table>
+        <thead><tr><th>Ticker</th><th>Company</th><th></th></tr></thead>
+        <tbody id="dw-tickers-body"></tbody>
+      </table>
+      <div id="dw-tickers-empty" class="empty" style="display:none;">No tickers tracked yet — add one below.</div>
+
+      <form class="inline" id="dw-add-ticker-form">
+        <div class="field">
+          <label for="dw-add-ticker">Ticker</label>
+          <input id="dw-add-ticker" placeholder="e.g. 700" required>
+          <span class="settings-note" id="dw-add-ticker-preview"></span>
+        </div>
+        <button type="submit">Add ticker</button>
+      </form>
+      <div class="msg" id="dw-add-ticker-msg"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Today's HKEX Dividend Watchlist</h2>
+        <button class="secondary" id="dw-refresh-btn" type="button">Refresh Watchlist</button>
+      </div>
+      <p class="hint">A deterministic, rule-based ranking of your tracked tickers by how likely each is to release a dividend-related announcement today or within the next few days — built from official HKEX board-meeting and results notices plus each company's own filing history. The LLM only extracts and explains facts here; it never assigns the score or invents a date. Generated once automatically when the app starts and reused for the rest of the day; press Refresh to regenerate (also needed after adding/removing tickers above).</p>
+      <div id="dw-status" class="settings-note" style="margin-bottom:10px;">Open this tab to load today's watchlist.</div>
+
+      <form class="inline" style="margin-top:0; margin-bottom:14px;" onsubmit="return false;">
+        <div class="field" style="flex:1; min-width:180px;">
+          <label for="dw-search">Search</label>
+          <input id="dw-search" placeholder="Ticker or company name">
+        </div>
+        <div class="field">
+          <label for="dw-band-filter">Confidence band</label>
+          <select id="dw-band-filter">
+            <option value="">All</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="rank">Rank</th>
+            <th data-sort="stockCode">Ticker</th>
+            <th data-sort="stockName">Company</th>
+            <th data-sort="score">Score</th>
+            <th data-sort="band">Band</th>
+            <th>Top reason</th>
+            <th>Board meeting</th>
+            <th>Results</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="dw-body"></tbody>
+      </table>
+      <div id="dw-empty" class="empty" style="display:none;">No watchlist generated yet — add a ticker above and press Refresh Watchlist.</div>
+    </div>
+  </section>
+
+  <!-- DIVIDENDS -->
+  <section class="tab-panel" id="tab-dividends">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Latest market filings</h2>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <select id="market-div-window" aria-label="Time window">
+            <option value="1">Today</option>
+            <option value="7">Last 7 days</option>
+          </select>
+          <button class="secondary" id="market-div-refresh" type="button">Refresh</button>
+        </div>
+      </div>
+      <p class="hint">The newest filings across <em>every</em> HKEX-listed company (not just your watchlist), any topic, newest first — the same list as HKEXnews' front page. Replaces the old dividend-titled-only view, which missed anything whose title didn't literally say "dividend" (e.g. a dividend declared inside an interim results announcement). Anything shown here becomes searchable in the Chat tab too.</p>
+      <div id="market-div-summary" class="settings-note" style="margin-bottom:8px;"></div>
+      <table>
+        <thead><tr><th>Released</th><th>Stock</th><th>Title</th><th></th></tr></thead>
+        <tbody id="market-div-body"></tbody>
+      </table>
+      <div id="market-div-status" class="empty">Open this tab to load the latest market filings.</div>
+    </div>
+
+    <div class="card">
+      <h2>Watchlist filings</h2>
+      <p class="hint">Every filing your watchlist tickers have released on their target date, newest first -- dividend details when confirmed, the filing title otherwise.</p>
+      <table>
+        <thead><tr><th>Stock</th><th>Title</th><th>Dividend</th><th>Ex-dividend</th><th>Released</th><th></th></tr></thead>
+        <tbody id="dividends-body"></tbody>
+      </table>
+      <div id="dividends-empty" class="empty" style="display:none;">No filings detected yet.</div>
+    </div>
+  </section>
+
+  <!-- BOARD MEETINGS -->
+  <section class="tab-panel" id="tab-board-meetings">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Upcoming Board Meetings</h2>
+        <button class="secondary" id="bm-refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">HKEXnews' own consolidated, market-wide list of upcoming board meeting notices -- not just your watchlist, every HKEX-listed company that has filed a notice so far. Covers roughly the next 6-7 weeks; a company can still file its notice later, so a stock's absence here is never proof no meeting is planned. "Likely dividend" just means the raw purpose text mentions DIV -- it's not a promise a dividend will be declared.</p>
+      <div id="bm-summary" class="settings-note" style="margin-bottom:8px;"></div>
+
+      <form class="inline" style="margin-top:0; margin-bottom:14px;" onsubmit="return false;">
+        <div class="field" style="flex:1; min-width:180px;">
+          <label for="bm-search">Search</label>
+          <input id="bm-search" placeholder="Stock name or code">
+        </div>
+        <div class="field">
+          <label for="bm-dividend-only">Likely dividend only</label>
+          <input id="bm-dividend-only" type="checkbox" style="width:auto; align-self:flex-start;">
+        </div>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="bmDate">Meeting date</th>
+            <th data-sort="stockName">Stock</th>
+            <th data-sort="stockCode">Code</th>
+            <th data-sort="purpose">Purpose</th>
+            <th data-sort="period">Period</th>
+          </tr>
+        </thead>
+        <tbody id="bm-body"></tbody>
+      </table>
+      <div id="bm-status" class="empty">Open this tab to load upcoming board meetings.</div>
+    </div>
+  </section>
+
+  <!-- HKEX SETTLEMENT -->
+  <section class="tab-panel" id="tab-hkex-settlement">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">HKEX Final Settlement Prices</h2>
+        <button class="secondary" id="hkex-fsp-refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">Final settlement prices for every HKEX-listed futures/options contract -- roughly a year of history in one table, pulled live from HKEX. Deterministic parsing; no AI involved.</p>
+      <div id="hkex-fsp-summary" class="settings-note" style="margin-bottom:8px;"></div>
+
+      <form class="inline" style="margin-top:0; margin-bottom:14px;" onsubmit="return false;">
+        <div class="field" style="flex:1; min-width:180px;">
+          <label for="hkex-fsp-search">Search</label>
+          <input id="hkex-fsp-search" placeholder="Contract or HKATS code">
+        </div>
+        <div class="field">
+          <label for="hkex-fsp-window">Window</label>
+          <select id="hkex-fsp-window">
+            <option value="">All (~1 year)</option>
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="3-months">Last 3 months</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="hkex-fsp-product-type">Product type</label>
+          <select id="hkex-fsp-product-type"><option value="">All</option></select>
+        </div>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="contract">Contract</th>
+            <th data-sort="hkatsCode">HKATS</th>
+            <th data-sort="productType">Product type</th>
+            <th data-sort="yearMonth">Contract month</th>
+            <th data-sort="lastTradingDateIso">Last trading date</th>
+            <th data-sort="fsp">FSP</th>
+            <th data-sort="publishDateIso">Publish date</th>
+          </tr>
+        </thead>
+        <tbody id="hkex-fsp-body"></tbody>
+      </table>
+      <div id="hkex-fsp-status" class="empty">Open this tab to load HKEX settlement prices.</div>
+    </div>
+  </section>
+
+  <!-- SGX SETTLEMENT -->
+  <section class="tab-panel" id="tab-sgx-settlement">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">SGX Final Settlement Prices</h2>
+        <button class="secondary" id="sgx-fsp-refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">Today's SGX-DC Final Settlement Price workbook (Financials and Commodities contracts), downloaded live from SGX and read directly. No AI involved.</p>
+      <div id="sgx-fsp-summary" class="settings-note" style="margin-bottom:8px;"></div>
+
+      <form class="inline" style="margin-top:0; margin-bottom:14px;" onsubmit="return false;">
+        <div class="field" style="flex:1; min-width:180px;">
+          <label for="sgx-fsp-search">Search</label>
+          <input id="sgx-fsp-search" placeholder="Contract or ticker">
+        </div>
+        <div class="field">
+          <label for="sgx-fsp-sheet">Category</label>
+          <select id="sgx-fsp-sheet">
+            <option value="">All</option>
+            <option value="Financials Contracts">Financials</option>
+            <option value="Commodities Contracts">Commodities</option>
+          </select>
+        </div>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="productType">Product type</th>
+            <th data-sort="contract">Contract</th>
+            <th data-sort="ticker">Ticker</th>
+            <th data-sort="contractMonth">Contract month</th>
+            <th data-sort="fsp">FSP</th>
+            <th data-sort="fspDate">FSP date</th>
+          </tr>
+        </thead>
+        <tbody id="sgx-fsp-body"></tbody>
+      </table>
+      <div id="sgx-fsp-status" class="empty">Open this tab to load SGX settlement prices.</div>
+    </div>
+
+    <div class="card">
+      <h2>SGX-DC FlexC -- latest file</h2>
+      <p class="hint">Flexible FX final settlement prices, from the most recently published FlexC file.</p>
+      <table>
+        <thead><tr><th>Ticker</th><th>FSP</th><th>FSP date</th></tr></thead>
+        <tbody id="sgx-flexc-body"></tbody>
+      </table>
+      <div id="sgx-flexc-empty" class="empty" style="display:none;">No FlexC data loaded yet.</div>
+    </div>
+
+    <div class="card">
+      <h2>Daily settlement prices -- any past trading day</h2>
+      <p class="hint">Daily settlement marks (like Eurex's D. Settle) per contract month, read directly from SGX's own public archive -- any trading day since 2018-01-19 (SGX's older files use column layouts this app doesn't parse), published the next morning. These are ongoing daily marks, not final settlements at expiry: a contract shows a settle of 0 on its own last trading day -- see the Final Settlement Prices table above for that figure instead.</p>
+
+      <form class="inline" id="sgx-daily-form">
+        <div class="field">
+          <label for="sgx-daily-date">Trading date</label>
+          <input id="sgx-daily-date" type="date">
+        </div>
+        <div class="field" style="flex:1; min-width:160px;">
+          <label for="sgx-daily-search">Ticker (optional)</label>
+          <input id="sgx-daily-search" placeholder="e.g. NK">
+        </div>
+        <button type="submit">Load</button>
+      </form>
+      <div id="sgx-daily-summary" class="settings-note" style="margin:10px 0 8px;"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th><th>Series</th><th>Contract month</th><th>Settle</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>OI</th>
+          </tr>
+        </thead>
+        <tbody id="sgx-daily-body"></tbody>
+      </table>
+      <div id="sgx-daily-status" class="empty">Pick a date above (e.g. yesterday) and press Load.</div>
+    </div>
+  </section>
+
+  <!-- EUREX -->
+  <section class="tab-panel" id="tab-eurex-settlement">
+    <div class="card">
+      <h2>Eurex daily settlement prices</h2>
+      <p class="hint">Settlement prices (D. Settle) per contract month for one Eurex product, as of a chosen trading date. Pulled live from Eurex; no AI involved.</p>
+
+      <form class="inline" id="eurex-product-form">
+        <div class="field">
+          <label for="eurex-product-code">Product code</label>
+          <input id="eurex-product-code" placeholder="e.g. FDAX" list="eurex-product-list" autocomplete="off">
+          <datalist id="eurex-product-list"></datalist>
+        </div>
+        <div class="field">
+          <label for="eurex-trading-date">Trading date</label>
+          <select id="eurex-trading-date"><option value="">Latest</option></select>
+        </div>
+        <button type="submit">Load</button>
+      </form>
+      <div id="eurex-resolve-row" style="display:none; margin-top:10px;">
+        <div class="msg error" id="eurex-resolve-hint"></div>
+        <form class="inline" id="eurex-resolve-form" style="margin-top:6px;">
+          <div class="field" style="flex:1; min-width:220px;">
+            <label for="eurex-resolve-url">That product's Eurex page URL</label>
+            <input id="eurex-resolve-url" placeholder="https://www.eurex.com/ex-en/markets/...">
+          </div>
+          <button type="submit" class="secondary">Resolve</button>
+        </form>
+      </div>
+      <div id="eurex-fsp-summary" class="settings-note" style="margin:10px 0 8px;"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Contract date</th><th>Type</th><th>Open</th><th>High</th><th>Low</th><th>Last</th><th>D. Settle</th><th>Volume</th><th>OI</th>
+          </tr>
+        </thead>
+        <tbody id="eurex-fsp-body"></tbody>
+      </table>
+      <div id="eurex-fsp-status" class="empty">Enter a product code above (e.g. FDAX) and press Load.</div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <h2 style="margin:0;">MSCI Futures -- Final Settlement Prices</h2>
+        <button class="secondary" id="eurex-msci-refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">Final settlement prices for Eurex MSCI index futures, by expiry.</p>
+
+      <form class="inline" style="margin-top:0; margin-bottom:14px;" onsubmit="return false;">
+        <div class="field" style="flex:1; min-width:180px;">
+          <label for="eurex-msci-search">Search</label>
+          <input id="eurex-msci-search" placeholder="Index name or Eurex code">
+        </div>
+        <div class="field">
+          <label for="eurex-msci-expiry">Expiry</label>
+          <select id="eurex-msci-expiry"></select>
+        </div>
+      </form>
+
+      <table>
+        <thead><tr><th>Index</th><th>Region</th><th>Type</th><th>Currency</th><th>Eurex code</th><th>FSP</th></tr></thead>
+        <tbody id="eurex-msci-body"></tbody>
+      </table>
+      <div id="eurex-msci-status" class="empty">Open this tab to load MSCI settlement prices.</div>
+    </div>
+  </section>
+
+  <!-- CHAT -->
+  <section class="tab-panel" id="tab-chat">
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Ask the assistant</h2>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span id="chat-feedback-count" class="settings-note" style="display:none;"></span>
+          <button class="secondary" id="chat-feedback-download-btn" type="button" style="font-size:12.5px; padding:5px 10px; display:none;">Download feedback log</button>
+          <button class="danger" id="chat-feedback-clear-btn" type="button" style="font-size:12.5px; padding:5px 10px; display:none;">Clear log</button>
+          <button class="secondary" id="chat-clear-btn" type="button" style="font-size:12.5px; padding:5px 10px;">Clear chat</button>
+        </div>
+      </div>
+      <p class="hint">It can manage your watchlist, look up filings already ingested, read a specific filing's full text on demand, and check HKEX directly (up to 3 days) if something's missing entirely. Requires a DeepSeek API key set in Settings. If a reply is wrong, press its 👎 — that saves the full turn (your question, the raw data the tools returned, the reply, and your note) to a log you can download here and feed to an AI coding session to get the cause fixed.</p>
+      <div id="chat-log"></div>
+      <form id="chat-form">
+        <input id="chat-input" placeholder="e.g. Add 700 for 2026-08-15" autocomplete="off">
+        <button type="submit" id="chat-send-btn">Send</button>
+      </form>
+      <div class="msg error" id="chat-msg"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="tab-panel" id="tab-settings">
+    <div class="card">
+      <h2>Settings</h2>
+      <p class="hint">Saved locally on this computer only (data/settings.json). Keys are only ever sent to the service you configure (DeepSeek / Slack / Discord / Telegram) when needed.</p>
+
+      <form id="settings-form">
+        <fieldset>
+          <legend>DeepSeek (LLM extraction)</legend>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="s-deepseek-key">API key <span id="s-deepseek-key-status" class="settings-note"></span></label>
+              <input id="s-deepseek-key" type="password" placeholder="Leave blank to keep current key">
+            </div>
+            <div class="field">
+              <label for="s-deepseek-base">Base URL</label>
+              <input id="s-deepseek-base" placeholder="https://api.deepseek.com">
+            </div>
+            <div class="field">
+              <label for="s-deepseek-model">Model (fast, non-thinking)</label>
+              <input id="s-deepseek-model" placeholder="deepseek-v4-flash">
+            </div>
+            <div class="field">
+              <label for="s-deepseek-reasoning-model">Reasoning model (ambiguous cases only)</label>
+              <input id="s-deepseek-reasoning-model" placeholder="deepseek-v4-pro">
+            </div>
+          </div>
+          <p class="settings-note" style="margin-top:10px;">Get a key at <a href="https://platform.deepseek.com/" target="_blank" rel="noopener">platform.deepseek.com</a> → API Keys. The reasoning model is only called when a filing extraction flags itself ambiguous -- routine classify/extract calls always use the faster model above.</p>
+          <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="secondary" id="test-deepseek-btn" type="button">Test connection</button>
+            <span class="msg" id="test-deepseek-msg"></span>
+          </div>
+          <p class="settings-note" style="margin-top:4px;">Tests the currently <em>saved</em> key -- save settings first if you just changed it.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Notifications (set at least one)</legend>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="s-slack">Slack webhook URL <span id="s-slack-status" class="settings-note"></span></label>
+              <input id="s-slack" type="password" placeholder="Leave blank to keep current value">
+            </div>
+            <div class="field">
+              <label for="s-discord">Discord webhook URL <span id="s-discord-status" class="settings-note"></span></label>
+              <input id="s-discord" type="password" placeholder="Leave blank to keep current value">
+            </div>
+            <div class="field">
+              <label for="s-tg-token">Telegram bot token <span id="s-tg-token-status" class="settings-note"></span></label>
+              <input id="s-tg-token" type="password" placeholder="Leave blank to keep current value">
+            </div>
+            <div class="field">
+              <label for="s-tg-chat">Telegram chat ID</label>
+              <input id="s-tg-chat" placeholder="e.g. 123456789">
+            </div>
+          </div>
+          <details style="margin-top:12px;">
+            <summary style="cursor:pointer; font-size:13px; color:var(--text-dim);">How do I get a webhook?</summary>
+            <div style="font-size:13px; color:var(--text-dim); margin-top:8px; line-height:1.6;">
+              <strong>Slack:</strong> Slack → your workspace → Settings → Apps → search "Incoming Webhooks" → Add to Slack → pick a channel → copy the Webhook URL.<br>
+              <strong>Discord:</strong> Server Settings → Integrations → Webhooks → New Webhook → pick a channel → Copy Webhook URL.<br>
+              <strong>Telegram:</strong> Message <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → /newbot → copy the token. Then message your new bot once, and visit
+              <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> in a browser to find your numeric chat ID.
+            </div>
+          </details>
+        </fieldset>
+
+        <fieldset>
+          <legend>Scheduler</legend>
+          <div class="settings-grid" style="grid-template-columns:repeat(3,1fr);">
+            <div class="field">
+              <label for="s-poll">Poll interval (seconds)</label>
+              <input id="s-poll" type="number" min="30">
+            </div>
+            <div class="field">
+              <label for="s-lookback">Scrape lookback (days)</label>
+              <input id="s-lookback" type="number" min="1">
+            </div>
+            <div class="field">
+              <label for="s-retries">Max extraction retries</label>
+              <input id="s-retries" type="number" min="1">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Race mode (arbitrage)</legend>
+          <p class="hint">On a target's exact date, the app polls that one ticker directly on
+            HKEX far more often than the normal cycle, and pings you the instant any filing
+            from it appears -- before the AI even reads it.</p>
+          <div class="settings-grid" style="grid-template-columns:repeat(3,1fr);">
+            <div class="field">
+              <label for="s-race-poll">Race poll interval (seconds)</label>
+              <input id="s-race-poll" type="number" min="5">
+            </div>
+            <div class="field">
+              <label for="s-race-start">Race window start hour (HKT, 0-23)</label>
+              <input id="s-race-start" type="number" min="0" max="23">
+            </div>
+            <div class="field">
+              <label for="s-race-end">Race window end hour (HKT, 1-24)</label>
+              <input id="s-race-end" type="number" min="1" max="24">
+            </div>
+            <div class="field">
+              <label for="s-race-alert-threshold">Alert after N consecutive HKEX failures</label>
+              <input id="s-race-alert-threshold" type="number" min="1">
+            </div>
+            <div class="field">
+              <label for="s-race-alert-cooldown">Repeat-alert cooldown (seconds)</label>
+              <input id="s-race-alert-cooldown" type="number" min="60">
+            </div>
+          </div>
+          <p class="hint" style="margin-top:10px;">If race mode can't reach HKEX for a racing
+            ticker, you'll get a "HKEX RACE MODE UNREACHABLE" alert after this many consecutive
+            failures, repeated at most once per cooldown period until it recovers.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Chat assistant</legend>
+          <div class="settings-grid" style="grid-template-columns:repeat(3,1fr);">
+            <div class="field">
+              <label for="s-chat-limit">Daily message limit (0 = unlimited)</label>
+              <input id="s-chat-limit" type="number" min="0">
+            </div>
+          </div>
+          <p class="hint" style="margin-top:10px;">A soft guardrail against unexpectedly high
+            DeepSeek API usage from the Chat tab. Counts messages over a rolling 24 hours.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Bloomberg (blpapi bridge)</legend>
+          <p class="hint">Optional. Lets the chat assistant pull live Bloomberg dividend data as a table
+            and adds the same data to dividend alerts. Requires a small bridge script running on the same
+            computer as a logged-in Bloomberg Terminal -- see the README for setup details.</p>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="s-bbg-enabled">Enable Bloomberg lookups</label>
+              <input id="s-bbg-enabled" type="checkbox" style="width:auto; align-self:flex-start;">
+            </div>
+            <div class="field">
+              <label for="s-bbg-url">Bridge URL</label>
+              <input id="s-bbg-url" placeholder="http://host.docker.internal:8195">
+            </div>
+            <div class="field">
+              <label for="s-bbg-token">Bridge token (optional) <span id="s-bbg-token-status" class="settings-note"></span></label>
+              <input id="s-bbg-token" type="password" placeholder="Leave blank to keep current value">
+            </div>
+          </div>
+        </fieldset>
+
+        <button type="submit">Save settings</button>
+        <span class="msg" id="settings-msg"></span>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+async function api(path, options = {}) {
+  const { timeoutMs = 45000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...fetchOptions,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      const secs = Math.round(timeoutMs / 1000);
+      throw new Error(`Request timed out after ${secs}s. Try narrowing your question (e.g. name a specific stock) and ask again.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* no body */ }
+  if (!res.ok) {
+    const detail = (body && body.detail) ? body.detail : `Request failed (${res.status})`;
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}
+
+// ---- Tabs ----
+$$("nav.tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    $$("nav.tabs button").forEach(b => b.classList.remove("active"));
+    $$(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    $(`#tab-${btn.dataset.tab}`).classList.add("active");
+    // Market-dividends hits HKEX live, so load it lazily on first open of the
+    // Dividends tab rather than on every dashboard poll.
+    if (btn.dataset.tab === "dividends" && !marketDivLoaded) loadMarketDividends();
+    // Watchlist generation itself already ran (or is running) server-side at
+    // startup -- see monitor.watchlist.trigger_background_generate -- this
+    // just lazily fetches/displays it, same convention as Dividends above.
+    if (btn.dataset.tab === "dividend-watchlist" && !dwLoaded) {
+      dwLoaded = true;
+      loadDwTickers();
+      loadDividendWatchlist();
+    }
+    // HKEXnews regenerates this list roughly daily and the app already
+    // force-refreshes it once at startup (see web.py's lifespan hook) --
+    // this lazy load just displays whatever that produced, same convention
+    // as the other tabs here.
+    if (btn.dataset.tab === "board-meetings" && !bmLoaded) loadBoardMeetings(false);
+    // Settlement-price tabs are each a live call to their own exchange --
+    // same lazy-on-first-open convention as Dividends/Dividend Watchlist
+    // above, not part of the dashboard's regular poll cycle.
+    if (btn.dataset.tab === "hkex-settlement" && !hkexFspLoaded) loadHkexFsp(false);
+    if (btn.dataset.tab === "sgx-settlement" && !sgxFspLoaded) loadSgxFsp(false);
+    if (btn.dataset.tab === "eurex-settlement") {
+      if (!eurexProductsLoaded) loadEurexProducts();
+      if (!eurexMsciLoaded) loadEurexMsci(false);
+    }
+  });
+});
+
+// ---- Dashboard ----
+function statusRow(label, ok, okText, badText, extra) {
+  const cls = ok ? "ok" : "bad";
+  return `<div class="status-item"><span class="dot ${cls}"></span><span class="label">${label}</span><span class="value">${extra || (ok ? okText : badText)}</span></div>`;
+}
+
+function fmtRelativeTime(iso) {
+  if (!iso) return null;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+// Whether outbound HTTPS trusts the OS certificate store (works behind a
+// TLS-inspecting corporate proxy) or falls back to certifi -- see
+// monitor._ssl_bootstrap. "Default (certifi)" is fine on a normal network;
+// it only matters if webhooks/HKEX fail with an SSL certificate error.
+function tlsTrustRow(status) {
+  if (status === "injected") {
+    return statusRow("TLS trust", true, "", "", "OS trust store (proxy-aware)");
+  }
+  if (typeof status === "string" && status.startsWith("failed")) {
+    return statusRow("TLS trust", false, "", "", "Setup error — see diagnostics.log");
+  }
+  return statusRow("TLS trust", true, "", "", "Default (certifi)");
+}
+
+// Per-channel delivery health, not just "a webhook URL is configured" --
+// see monitor.notifier.dispatch_text / monitor.registry.ChannelHealth.
+function channelHealthRow(channel, health) {
+  const label = channel.charAt(0).toUpperCase() + channel.slice(1);
+  const failures = (health && health.consecutive_failures) || 0;
+  if (failures > 0) {
+    const lastFail = fmtRelativeTime(health.last_failure_at);
+    return statusRow(label, false, "", `${failures} failed attempt${failures > 1 ? "s" : ""} (${lastFail})`);
+  }
+  if (health && health.last_success_at) {
+    return statusRow(label, true, "", "", `Delivered ${fmtRelativeTime(health.last_success_at)}`);
+  }
+  return statusRow(label, true, "", "", "Not used yet");
+}
+
+async function loadStatus() {
+  let s;
+  try {
+    s = await api("/api/status");
+  } catch (e) {
+    $("#header-dot").className = "dot bad";
+    $("#header-text").textContent = "Unreachable";
+    return;
+  }
+
+  const overallOk = s.database_healthy && s.daemon_healthy;
+  $("#header-dot").className = "dot " + (overallOk ? "ok" : "bad");
+  $("#header-text").textContent = overallOk ? "Running" : "Needs attention";
+
+  const channelHealth = s.channel_health || {};
+  const notificationChannels = s.notification_channels || [];
+
+  $("#status-grid").innerHTML = [
+    statusRow("Database", s.database_healthy, "Healthy", "Unreachable"),
+    statusRow("Background service", s.daemon_healthy, "Running", "Not seen recently"),
+    statusRow("Notifications", notificationChannels.length > 0, "", "None configured",
+      notificationChannels.length > 0 ? notificationChannels.join(", ") : null),
+    ...notificationChannels.map(ch => channelHealthRow(ch, channelHealth[ch])),
+    tlsTrustRow(s.tls_trust_store),
+    statusRow("DeepSeek key", s.llm_key_configured, "Configured", "Not set"),
+    statusRow("Active targets", true, "", "", `${s.targets_active} / ${s.targets_total}`),
+    statusRow("Alerts sent", true, "", "", `${s.alerts_sent}`),
+    statusRow("Race mode", (s.racing_tickers || []).length > 0, "", "Not active",
+      (s.racing_tickers || []).length > 0 ? "⚡ " + s.racing_tickers.join(", ") : null),
+  ].join("");
+
+  const failingChannels = notificationChannels.filter(ch => ((channelHealth[ch] || {}).consecutive_failures || 0) > 0);
+
+  const banner = $("#setup-banner");
+  if (!s.llm_key_configured) {
+    banner.innerHTML = `<div class="banner warn">⚠️ Set a DeepSeek API key in <a onclick="document.querySelector('[data-tab=settings]').click()" href="#">Settings</a> to enable dividend detection.</div>`;
+  } else if (notificationChannels.length === 0) {
+    banner.innerHTML = `<div class="banner warn">⚠️ No notification channel configured yet — add one in <a onclick="document.querySelector('[data-tab=settings]').click()" href="#">Settings</a> so alerts have somewhere to go.</div>`;
+  } else if (failingChannels.length > 0) {
+    banner.innerHTML = `<div class="banner bad">🔴 ${failingChannels.join(", ")} notification delivery is currently failing — check the webhook/token in <a onclick="document.querySelector('[data-tab=settings]').click()" href="#">Settings</a> or data/diagnostics.log.</div>`;
+  } else {
+    banner.innerHTML = "";
+  }
+}
+
+function fmtAlertTime(iso) {
+  try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+}
+
+async function loadAlerts() {
+  let alerts;
+  try {
+    alerts = await api("/api/alerts?limit=25");
+  } catch (e) {
+    $("#alerts-list").innerHTML = `<div class="empty">Couldn't load alerts.</div>`;
+    return;
+  }
+  if (!alerts.length) {
+    $("#alerts-list").innerHTML = `<div class="empty">No alerts sent yet.</div>`;
+    return;
+  }
+  $("#alerts-list").innerHTML = alerts.map(renderAlertItem).join("");
+}
+
+// HTML-escape for text AND attribute contexts (covers quotes). Alert
+// fields ultimately carry HKEX filing titles/company names -- untrusted
+// upstream text, same reasoning as the Activity log's textContent-only
+// rendering -- so nothing server-derived may reach innerHTML unescaped.
+function esc(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderAlertItem(a) {
+  const sourceLink = a.source_url ? ` · <a href="${esc(a.source_url)}" target="_blank" rel="noopener">source</a>` : "";
+  const sentVia = `${esc(fmtAlertTime(a.timestamp))} · sent via ${esc((a.channels || []).join(", ") || "?")}`;
+
+  if (a.kind === "ping") {
+    return `
+      <div class="alert-item">
+        <div class="title">⚡ ${esc(a.ticker)} — ${esc(a.title || "New filing detected")}</div>
+        <div class="meta">
+          ${a.company_name ? esc(a.company_name) + " · " : ""}${sentVia}${sourceLink}
+        </div>
+      </div>
+    `;
+  }
+
+  if (a.kind === "race_error" || a.kind === "race_recovered") {
+    const icon = a.kind === "race_error" ? "🔴" : "✅";
+    const label = a.kind === "race_error" ? "Race mode can't reach HKEX" : "Race mode recovered";
+    return `
+      <div class="alert-item">
+        <div class="title">${icon} ${esc(a.ticker)} — ${label}</div>
+        <div class="meta">
+          ${esc(a.message || "")}<br>
+          ${sentVia}
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="alert-item">
+      <div class="title">${esc(a.ticker)} — ${esc(a.company_name || "Unknown company")}</div>
+      <div class="meta">
+        Payout: ${esc(a.payout_amount || "N/A")} · Ex-div: ${esc(a.ex_dividend_date || "N/A")} · Payment: ${esc(a.payment_date || "N/A")}<br>
+        ${sentVia}${sourceLink}
+      </div>
+    </div>
+  `;
+}
+
+// ---- Activity log ----
+let activityEvents = [];
+let activityPaused = false;
+
+async function loadActivity() {
+  const level = $("#activity-level").value;
+  let data;
+  try {
+    data = await api(`/api/activity?limit=200${level ? `&level=${level}` : ""}`);
+  } catch (e) {
+    if (!activityPaused) $("#activity-feed").innerHTML = `<div class="empty">Couldn't load activity.</div>`;
+    return;
+  }
+  activityEvents = data.events || [];
+  if (!activityPaused) renderActivityFeed();
+}
+
+function renderActivityFeed() {
+  const feed = $("#activity-feed");
+  feed.innerHTML = "";
+  if (!activityEvents.length) {
+    feed.innerHTML = `<div class="empty">No activity yet.</div>`;
+    return;
+  }
+  activityEvents.forEach(ev => feed.appendChild(renderActivityRow(ev)));
+}
+
+// Built with createElement/textContent (never innerHTML) -- messages can
+// contain raw HKEX filing titles, which are untrusted upstream text (same
+// reasoning as renderInlineBold's chat rendering above).
+function renderActivityRow(ev) {
+  const row = document.createElement("div");
+  row.className = "activity-row";
+
+  const time = document.createElement("span");
+  time.className = "activity-time";
+  time.textContent = fmtRelativeTime(ev.timestamp) || "";
+  time.title = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : "";
+  row.appendChild(time);
+
+  const badge = document.createElement("span");
+  badge.className = `lvl-badge lvl-${ev.level || "info"}`;
+  badge.textContent = ev.level || "info";
+  row.appendChild(badge);
+
+  const source = document.createElement("span");
+  source.className = "activity-source";
+  source.textContent = ev.source || "";
+  row.appendChild(source);
+
+  if (ev.ticker) {
+    const ticker = document.createElement("span");
+    ticker.className = "activity-ticker";
+    ticker.textContent = ev.ticker;
+    row.appendChild(ticker);
+  }
+
+  const message = document.createElement("span");
+  message.className = "activity-message";
+  message.textContent = ev.message || "";
+  // Surface the structured extras (refresh duration, filing counts, LLM
+  // verdict fields, ...) without widening the row -- hover the message.
+  if (ev.meta && Object.keys(ev.meta).length) {
+    message.title = Object.entries(ev.meta).map(([k, v]) => `${k}: ${v}`).join("\n");
+  }
+  row.appendChild(message);
+
+  return row;
+}
+
+$("#activity-level").addEventListener("change", () => loadActivity());
+
+$("#activity-feed").addEventListener("mouseenter", () => { activityPaused = true; });
+$("#activity-feed").addEventListener("mouseleave", () => {
+  activityPaused = false;
+  renderActivityFeed();
+});
+
+$("#test-alert-btn").addEventListener("click", async () => {
+  const btn = $("#test-alert-btn");
+  const msg = $("#test-alert-msg");
+  btn.disabled = true;
+  msg.textContent = "Sending…";
+  msg.className = "msg";
+  try {
+    const res = await api("/api/test-alert", { method: "POST" });
+    msg.textContent = res.any_succeeded ? "Sent! Check your channel." : "Failed — see data/diagnostics.log";
+    msg.className = "msg " + (res.any_succeeded ? "success" : "error");
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = "msg error";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---- Watchlist ----
+const MATCH_STATUS_BADGES = {
+  upcoming: { icon: "⏳", label: "Upcoming", color: "var(--text-dim)" },
+  racing: { icon: "⚡", label: "Racing today", color: "var(--accent)" },
+  today: { icon: "📅", label: "Today", color: "var(--text-dim)" },
+  seen: { icon: "✅", label: "Seen", color: "var(--ok)" },
+  pending: { icon: "⚠️", label: "No filing seen yet", color: "var(--warn)" },
+  inactive: { icon: "—", label: "Inactive", color: "var(--text-dim)" },
+};
+
+function renderMatchStatus(matchStatus) {
+  const badge = MATCH_STATUS_BADGES[matchStatus];
+  if (!badge) return "";
+  return `<span style="color:${badge.color};">${badge.icon} ${badge.label}</span>`;
+}
+
+async function loadTargets() {
+  let targets;
+  try {
+    targets = await api("/api/targets");
+  } catch (e) {
+    $("#targets-body").innerHTML = "";
+    $("#targets-empty").style.display = "block";
+    $("#targets-empty").textContent = "Couldn't load targets.";
+    return;
+  }
+  const body = $("#targets-body");
+  if (!targets.length) {
+    body.innerHTML = "";
+    $("#targets-empty").style.display = "block";
+    return;
+  }
+  $("#targets-empty").style.display = "none";
+  body.innerHTML = targets.map(t => `
+    <tr>
+      <td>${esc(t.ticker)}</td>
+      <td>${esc(t.target_date)}</td>
+      <td>${esc(t.status)}</td>
+      <td>${renderMatchStatus(t.match_status)}</td>
+      <td class="row-actions"><button class="danger" data-remove="${esc(t.ticker)}" type="button">Remove</button></td>
+    </tr>
+  `).join("");
+  $$("[data-remove]", body).forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await api(`/api/targets/${encodeURIComponent(btn.dataset.remove)}`, { method: "DELETE" });
+        await loadTargets();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// Resolve the ticker to a company name on blur, so a typo or wrong code
+// gets caught before the user commits to watching it -- purely
+// informational, never blocks Add (a slow/unreachable HKEX lookup must not
+// stop the user from adding a target).
+$("#add-ticker").addEventListener("blur", async () => {
+  const preview = $("#add-ticker-preview");
+  const ticker = $("#add-ticker").value.trim();
+  if (!ticker) { preview.textContent = ""; return; }
+  preview.textContent = "Checking…";
+  try {
+    const info = await api(`/api/resolve-ticker/${encodeURIComponent(ticker)}`);
+    preview.textContent = `→ ${info.name} (${info.code})`;
+    preview.className = "settings-note";
+  } catch (e) {
+    preview.textContent = `⚠️ ${e.message}`;
+    preview.className = "settings-note";
+  }
+});
+
+$("#add-target-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("#add-target-msg");
+  const ticker = $("#add-ticker").value.trim();
+  const targetDate = $("#add-date").value;
+  msg.textContent = "";
+  try {
+    await api("/api/targets", {
+      method: "POST",
+      body: JSON.stringify({ ticker, target_date: targetDate }),
+    });
+    $("#add-ticker").value = "";
+    $("#add-date").value = "";
+    $("#add-ticker-preview").textContent = "";
+    msg.className = "msg success";
+    msg.textContent = "Added.";
+    await loadTargets();
+    await loadStatus();
+  } catch (e) {
+    msg.className = "msg error";
+    msg.textContent = e.message;
+  }
+});
+
+// ---- Dividends ----
+function fmtDividendDate(raw) {
+  if (!raw) return "N/A";
+  // ISO datetimes come from the DB (normal-cycle detections); HKEX's own
+  // "DD/MM/YYYY HH:MM" strings come from race mode's direct site search.
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    try { return new Date(raw).toLocaleString(); } catch (e) { return raw; }
+  }
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}))?/);
+  if (m) {
+    const [, dd, mm, yyyy, hm] = m;
+    return hm ? `${yyyy}-${mm}-${dd} ${hm}` : `${yyyy}-${mm}-${dd}`;
+  }
+  return raw;
+}
+
+async function loadDividends() {
+  let rows;
+  try {
+    rows = await api("/api/dividends?limit=100");
+  } catch (e) {
+    $("#dividends-body").innerHTML = "";
+    $("#dividends-empty").style.display = "block";
+    $("#dividends-empty").textContent = "Couldn't load dividends.";
+    return;
+  }
+  const body = $("#dividends-body");
+  if (!rows.length) {
+    body.innerHTML = "";
+    $("#dividends-empty").style.display = "block";
+    $("#dividends-empty").textContent = "No filings detected yet.";
+    return;
+  }
+  $("#dividends-empty").style.display = "none";
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.ticker || "N/A")}${r.stockName ? " — " + esc(r.stockName) : ""}</td>
+      <td>${esc(r.title || "")}</td>
+      <td>${esc(r.payoutAmount || "N/A")}</td>
+      <td>${esc(r.exDividendDate || "N/A")}</td>
+      <td>${esc(fmtDividendDate(r.filingDate))}</td>
+      <td>${r.documentUrl ? `<a href="${esc(r.documentUrl)}" target="_blank" rel="noopener">file</a>` : ""}</td>
+    </tr>
+  `).join("");
+}
+
+// Latest market filings -- ALL HKEX companies, any topic, straight from the
+// feed behind HKEXnews' front page (see /api/latest-filings). Loaded lazily on
+// first Dividends-tab open and on explicit Refresh / window change, NOT on the
+// 15s dashboard poll, since each call is a live HKEX request.
+let marketDivLoaded = false;
+
+async function loadMarketDividends() {
+  const days = $("#market-div-window").value || "1";
+  const status = $("#market-div-status");
+  const summary = $("#market-div-summary");
+  const body = $("#market-div-body");
+  const btn = $("#market-div-refresh");
+  marketDivLoaded = true;
+  status.style.display = "block";
+  status.textContent = "Loading the latest market filings…";
+  summary.textContent = "";
+  btn.disabled = true;
+
+  let data;
+  try {
+    data = await api(`/api/latest-filings?limit=20&days=${encodeURIComponent(days)}`, { timeoutMs: 90000 });
+  } catch (e) {
+    body.innerHTML = "";
+    status.style.display = "block";
+    status.textContent = `Couldn't load the latest filings: ${e.message}`;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+
+  const filings = data.filings || [];
+  if (!filings.length) {
+    body.innerHTML = "";
+    status.style.display = "block";
+    status.textContent = data.days === 7 ? "No filings found in the last 7 days." : "No filings published yet today.";
+    return;
+  }
+
+  status.style.display = "none";
+  const distinct = new Set(filings.map(f => f.stockCode)).size;
+  summary.textContent =
+    `The ${filings.length} newest filings ${data.days === 7 ? "of the last 7 days" : "today"} (${distinct} compan${distinct === 1 ? "y" : "ies"}), newest first`;
+
+  body.innerHTML = filings.map(f => `
+    <tr>
+      <td>${esc(fmtDividendDate(f.dateTime || f.date))}</td>
+      <td>${esc(f.stockCode || "N/A")}${f.stockName ? " — " + esc(f.stockName) : ""}</td>
+      <td>${esc(f.title || "")}</td>
+      <td>${f.documentUrl ? `<a href="${esc(f.documentUrl)}" target="_blank" rel="noopener">file</a>` : ""}</td>
+    </tr>
+  `).join("");
+}
+
+$("#market-div-refresh").addEventListener("click", loadMarketDividends);
+$("#market-div-window").addEventListener("change", loadMarketDividends);
+
+// ---- Dividend Watchlist ----
+// Generation itself happens server-side (once at app startup, reused for the
+// rest of the day, or on demand via Refresh) -- see monitor.watchlist. This
+// section only manages the tracked-ticker list and fetches/renders whatever
+// ranking currently exists; it never triggers generation on a timer.
+let dwLoaded = false;
+let dwRows = [];
+let dwSort = { key: "rank", dir: "asc" };
+let dwPollAttempts = 0;
+// Bounded client-side poll while generation is in progress -- NOT a
+// recurring scheduler, just this one tab noticing when a one-shot
+// background generation finishes. Scoped to the user's own tickers (not
+// market-wide), so even a first-ever run is usually just a couple of
+// minutes -- a much shorter budget than a market-wide scan would need.
+const DW_POLL_MAX = 60;
+const DW_POLL_INTERVAL_MS = 6000;
+
+// -- Tracked tickers --
+async function loadDwTickers() {
+  let tickers;
+  try {
+    tickers = await api("/api/watchlist/tickers");
+  } catch (e) {
+    $("#dw-tickers-body").innerHTML = "";
+    $("#dw-tickers-empty").style.display = "block";
+    $("#dw-tickers-empty").textContent = "Couldn't load tickers.";
+    return;
+  }
+  const body = $("#dw-tickers-body");
+  if (!tickers.length) {
+    body.innerHTML = "";
+    $("#dw-tickers-empty").style.display = "block";
+    $("#dw-tickers-empty").textContent = "No tickers tracked yet — add one below.";
+    return;
+  }
+  $("#dw-tickers-empty").style.display = "none";
+  body.innerHTML = tickers.map(t => `
+    <tr>
+      <td>${esc(t.ticker)}</td>
+      <td>${esc(t.name || "—")}</td>
+      <td class="row-actions"><button class="danger" data-remove-dw-ticker="${esc(t.ticker)}" type="button">Remove</button></td>
+    </tr>
+  `).join("");
+  $$("[data-remove-dw-ticker]", body).forEach(btn => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await api(`/api/watchlist/tickers/${encodeURIComponent(btn.dataset.removeDwTicker)}`, { method: "DELETE" });
+        await loadDwTickers();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// Resolve the ticker to a company name on blur, mirroring the alert
+// Watchlist's add-target preview above -- informational only, never blocks
+// Add (a slow/unreachable HKEX lookup must not stop the user from tracking
+// a ticker they typed correctly).
+$("#dw-add-ticker").addEventListener("blur", async () => {
+  const preview = $("#dw-add-ticker-preview");
+  const ticker = $("#dw-add-ticker").value.trim();
+  if (!ticker) { preview.textContent = ""; return; }
+  preview.textContent = "Checking…";
+  try {
+    const info = await api(`/api/resolve-ticker/${encodeURIComponent(ticker)}`);
+    preview.textContent = `→ ${info.name} (${info.code})`;
+  } catch (e) {
+    preview.textContent = `⚠️ ${e.message}`;
+  }
+});
+
+$("#dw-add-ticker-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("#dw-add-ticker-msg");
+  const ticker = $("#dw-add-ticker").value.trim();
+  msg.textContent = "";
+  try {
+    await api("/api/watchlist/tickers", { method: "POST", body: JSON.stringify({ ticker }) });
+    $("#dw-add-ticker").value = "";
+    $("#dw-add-ticker-preview").textContent = "";
+    msg.className = "msg success";
+    msg.textContent = "Added — press Refresh Watchlist to include it in today's ranking.";
+    await loadDwTickers();
+  } catch (e) {
+    msg.className = "msg error";
+    msg.textContent = e.message;
+  }
+});
+
+// -- Ranking table --
+function provenanceChip(label) {
+  return `<span class="provenance-chip ${label}">${label}</span>`;
+}
+
+function dwFilteredSorted() {
+  const q = ($("#dw-search").value || "").trim().toLowerCase();
+  const band = $("#dw-band-filter").value;
+  let rows = dwRows.filter(r => {
+    if (band && r.band !== band) return false;
+    if (!q) return true;
+    return (r.stockCode || "").toLowerCase().includes(q) || (r.stockName || "").toLowerCase().includes(q);
+  });
+  const { key, dir } = dwSort;
+  rows = rows.slice().sort((a, b) => {
+    let av = a[key], bv = b[key];
+    if (typeof av === "string") av = av.toLowerCase();
+    if (typeof bv === "string") bv = bv.toLowerCase();
+    if (av === null || av === undefined) av = dir === "asc" ? Infinity : -Infinity;
+    if (bv === null || bv === undefined) bv = dir === "asc" ? Infinity : -Infinity;
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+function renderReasonRow(r) {
+  return `
+    <div class="dw-reason-row">
+      ${provenanceChip(r.label)}
+      <span>${esc(r.signal)} <span class="dw-reason-evidence">(+${esc(r.weight)})</span></span>
+      <span class="dw-reason-evidence">${esc(r.evidence || "")}</span>
+    </div>
+  `;
+}
+
+function renderDwDetailPanel(row) {
+  const hw = row.historicalWindow || {};
+  const ld = row.latestDividend || {};
+  const reasons = (row.reasons || []).map(renderReasonRow).join("") || `<div class="empty">No scoring signals recorded.</div>`;
+  const evidence = (row.evidence || []).map(e => `
+    <div class="source-item">
+      ${e.documentUrl ? `<a href="${esc(e.documentUrl)}" target="_blank" rel="noopener">${esc(e.title || e.documentUrl)}</a>` : esc(e.title || "(untitled filing)")}
+      ${e.announcementDate ? `<span class="source-date"> · ${esc(e.announcementDate)}</span>` : ""}
+    </div>
+  `).join("") || `<div class="empty">No source filings recorded.</div>`;
+
+  return `
+    <div class="dw-detail-grid">
+      <div>
+        <div class="label">Historical declaration window</div>
+        <div>${hw.numObservations
+          ? `Typically around month ${hw.avgDeclarationMonth ?? "—"}, every ~${hw.avgDeclarationIntervalDays ?? "—"} days
+             (${hw.numObservations} observation${hw.numObservations === 1 ? "" : "s"}, consistency ${hw.consistencyScore != null ? hw.consistencyScore.toFixed(2) : "—"})`
+          : "No dividend history on record yet."}</div>
+      </div>
+      <div>
+        <div class="label">Latest dividend on record</div>
+        <div>${ld.type ? `${ld.type} · ${ld.amount || "amount N/A"} · declared ${ld.declaredDate || "N/A"}` : "No prior dividend on record."}</div>
+      </div>
+    </div>
+    ${row.explanation ? `<p class="hint" style="margin:0 0 12px 0;">${esc(row.explanation)}</p>` : ""}
+    <div style="font-weight:650; font-size:13px; margin-bottom:6px;">Scoring breakdown</div>
+    ${reasons}
+    <div style="font-weight:650; font-size:13px; margin:14px 0 6px;">Evidence used</div>
+    ${evidence}
+  `;
+}
+
+function renderDividendWatchlistTable() {
+  const rows = dwFilteredSorted();
+  const body = $("#dw-body");
+  $("#dw-empty").style.display = rows.length ? "none" : "block";
+  if (!rows.length) { body.innerHTML = ""; return; }
+
+  body.innerHTML = rows.map((r, i) => {
+    const topReason = (r.reasons && r.reasons[0]) ? r.reasons[0].signal : "—";
+    const rowId = `dw-detail-${i}`;
+    return `
+      <tr>
+        <td>${r.rank ?? "—"}</td>
+        <td>${esc(r.stockCode)}</td>
+        <td>${esc(r.stockName || "—")}</td>
+        <td>${esc(r.score)}</td>
+        <td><span class="band-pill ${esc(r.band)}">${esc(r.band)}</span></td>
+        <td>${esc(topReason)}</td>
+        <td>${esc(r.boardMeetingDate || "—")}</td>
+        <td>${esc(r.resultsDate || "—")}</td>
+        <td class="row-actions"><button class="dw-expand-btn" type="button" data-target="${rowId}">Details ▾</button></td>
+      </tr>
+      <tr class="dw-detail-row" id="${rowId}" style="display:none;"><td colspan="9">${renderDwDetailPanel(r)}</td></tr>
+    `;
+  }).join("");
+
+  $$(".dw-expand-btn", body).forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = $("#" + btn.dataset.target);
+      const open = target.style.display !== "none";
+      target.style.display = open ? "none" : "table-row";
+      btn.textContent = open ? "Details ▾" : "Details ▴";
+    });
+  });
+}
+
+$$("#tab-dividend-watchlist th[data-sort]").forEach(th => {
+  th.classList.add("sortable");
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    dwSort = { key, dir: dwSort.key === key && dwSort.dir === "asc" ? "desc" : "asc" };
+    renderDividendWatchlistTable();
+  });
+});
+$("#dw-search").addEventListener("input", renderDividendWatchlistTable);
+$("#dw-band-filter").addEventListener("change", renderDividendWatchlistTable);
+
+async function loadDividendWatchlist() {
+  const status = $("#dw-status");
+  let data;
+  try {
+    data = await api("/api/watchlist", { timeoutMs: 20000 });
+  } catch (e) {
+    status.textContent = `Couldn't load watchlist: ${e.message}`;
+    return;
+  }
+  dwRows = data.rows || [];
+  renderDividendWatchlistTable();
+
+  if (data.status === "generating") {
+    status.textContent = "Generating today's watchlist — usually just a couple of minutes for a handful of tickers (live HKEX search + AI extraction). This updates automatically.";
+    if (dwPollAttempts < DW_POLL_MAX) {
+      dwPollAttempts++;
+      setTimeout(loadDividendWatchlist, DW_POLL_INTERVAL_MS);
+    }
+    return;
+  }
+  dwPollAttempts = DW_POLL_MAX; // stop any pending poll chain now that we have a result
+  status.textContent = dwRows.length
+    ? `Generated ${fmtRelativeTime(data.generatedAt) || "recently"} · ${dwRows.length} compan${dwRows.length === 1 ? "y" : "ies"}`
+    : "No companies scored today — add a ticker above and press Refresh Watchlist.";
+}
+
+$("#dw-refresh-btn").addEventListener("click", async () => {
+  const btn = $("#dw-refresh-btn");
+  const status = $("#dw-status");
+  btn.disabled = true;
+  dwPollAttempts = DW_POLL_MAX; // a manual refresh supersedes any pending auto-poll
+  status.textContent = "Refreshing — usually quick for a handful of tickers (live HKEX search + AI extraction)…";
+  try {
+    const data = await api("/api/watchlist/refresh", { method: "POST", timeoutMs: 180000 });
+    dwRows = data.rows || [];
+    status.textContent = dwRows.length
+      ? `Generated ${fmtRelativeTime(data.generatedAt) || "just now"} · ${dwRows.length} compan${dwRows.length === 1 ? "y" : "ies"}`
+      : "No companies scored today.";
+    renderDividendWatchlistTable();
+  } catch (e) {
+    status.textContent = `Refresh failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---- Settlement Prices (HKEX / SGX / Eurex) ----
+// Three independent live sources, each its own tab; see monitor/settlement.py
+// for how each was reverse-engineered. All deterministic -- no AI involved.
+
+function sortRows(rows, key, dir) {
+  const EMPTY = dir === "asc" ? "￿" : "";
+  return rows.slice().sort((a, b) => {
+    let av = a[key], bv = b[key];
+    if (typeof av === "string") av = av.toLowerCase();
+    if (typeof bv === "string") bv = bv.toLowerCase();
+    if (av === null || av === undefined || av === "") av = EMPTY;
+    if (bv === null || bv === undefined || bv === "") bv = EMPTY;
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
+
+function wireSortableHeaders(panelSelector, getSort, setSort, onChange) {
+  $$(`${panelSelector} th[data-sort]`).forEach(th => {
+    th.classList.add("sortable");
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      const current = getSort();
+      setSort({ key, dir: current.key === key && current.dir === "asc" ? "desc" : "asc" });
+      onChange();
+    });
+  });
+}
+
+// -- Board Meetings --
+// Market-wide, forward-looking notice list from HKEXnews (monitor.board_meetings)
+// -- distinct from the Dividend Watchlist tab above, which is per-tracked-ticker.
+let bmLoaded = false;
+let bmRows = [];
+let bmSort = { key: "bmDate", dir: "asc" };
+
+function bmFilteredSorted() {
+  const q = ($("#bm-search").value || "").trim().toLowerCase();
+  const dividendOnly = $("#bm-dividend-only").checked;
+  const rows = bmRows.filter(r => {
+    if (dividendOnly && !r.likelyDividend) return false;
+    if (q && !((r.stockName || "").toLowerCase().includes(q) || (r.stockCode || "").toLowerCase().includes(q))) return false;
+    return true;
+  });
+  return sortRows(rows, bmSort.key, bmSort.dir);
+}
+
+function renderBmTable() {
+  const rows = bmFilteredSorted();
+  $("#bm-body").innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.bmDate || "")}</td>
+      <td>${esc(r.stockName || "")}</td>
+      <td>${esc(r.stockCode || "")}</td>
+      <td>${esc(r.purpose || "")}</td>
+      <td>${esc(r.period || "")}</td>
+    </tr>
+  `).join("");
+  const status = $("#bm-status");
+  status.style.display = rows.length ? "none" : "block";
+  if (!rows.length) status.textContent = bmLoaded ? "No rows match your filters." : "Open this tab to load upcoming board meetings.";
+}
+
+async function loadBoardMeetings(force) {
+  const status = $("#bm-status");
+  status.style.display = "block";
+  status.textContent = "Loading upcoming board meetings…";
+  try {
+    const data = await api(`/api/board-meetings${force ? "?refresh=1" : ""}`, { timeoutMs: 45000 });
+    bmLoaded = true;
+    bmRows = data.rows || [];
+    const generated = data.generatedDate ? `HKEXnews list generated ${data.generatedDate}` : "generation date unknown";
+    $("#bm-summary").textContent = `${bmRows.length} rows · ${generated} · fetched ${fmtRelativeTime(data.asOf) || "just now"}`;
+    renderBmTable();
+  } catch (e) {
+    status.style.display = "block";
+    status.textContent = `Couldn't load board meetings: ${e.message}`;
+  }
+}
+
+wireSortableHeaders("#tab-board-meetings", () => bmSort, (s) => { bmSort = s; }, renderBmTable);
+$("#bm-search").addEventListener("input", renderBmTable);
+$("#bm-dividend-only").addEventListener("change", renderBmTable);
+$("#bm-refresh").addEventListener("click", () => loadBoardMeetings(true));
+
+// -- HKEX Final Settlement Prices --
+let hkexFspLoaded = false;
+let hkexFspRows = [];
+let hkexFspSort = { key: "publishDateIso", dir: "desc" };
+
+function hkexFspFilteredSorted() {
+  const q = ($("#hkex-fsp-search").value || "").trim().toLowerCase();
+  const windowSel = $("#hkex-fsp-window").value;
+  const productType = $("#hkex-fsp-product-type").value;
+  const now = new Date();
+
+  let rows = hkexFspRows.filter(r => {
+    if (productType && r.productType !== productType) return false;
+    if (q && !((r.contract || "").toLowerCase().includes(q) || (r.hkatsCode || "").toLowerCase().includes(q))) return false;
+    if (!windowSel) return true;
+    const d = r.publishDateIso;
+    if (!d) return false;
+    if (windowSel === "this-month") return d.startsWith(now.toISOString().slice(0, 7));
+    if (windowSel === "last-month") {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.startsWith(prev.toISOString().slice(0, 7));
+    }
+    if (windowSel === "3-months") {
+      const cutoff = new Date(now.getTime() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      return d >= cutoff;
+    }
+    return true;
+  });
+  return sortRows(rows, hkexFspSort.key, hkexFspSort.dir);
+}
+
+function renderHkexFspTable() {
+  const rows = hkexFspFilteredSorted();
+  $("#hkex-fsp-body").innerHTML = rows.slice(0, 500).map(r => `
+    <tr>
+      <td>${esc(r.contract || "")}</td>
+      <td>${esc(r.hkatsCode || "")}</td>
+      <td>${esc(r.productType || "")}</td>
+      <td>${esc(r.yearMonth || "")}</td>
+      <td>${esc(r.lastTradingDate || "")}</td>
+      <td>${esc(r.fsp ?? "")}</td>
+      <td>${esc(r.publishDate || "")}</td>
+    </tr>
+  `).join("");
+  const status = $("#hkex-fsp-status");
+  status.style.display = rows.length ? "none" : "block";
+  if (!rows.length) status.textContent = hkexFspLoaded ? "No rows match your filters." : "Open this tab to load HKEX settlement prices.";
+  else if (rows.length > 500) status.style.display = "none"; // table itself shows the (capped) rows
+}
+
+async function loadHkexFsp(force) {
+  const status = $("#hkex-fsp-status");
+  status.style.display = "block";
+  status.textContent = "Loading HKEX settlement prices…";
+  try {
+    const data = await api(`/api/settlement/hkex${force ? "?refresh=1" : ""}`, { timeoutMs: 45000 });
+    hkexFspLoaded = true;
+    hkexFspRows = data.rows || [];
+    const typeSel = $("#hkex-fsp-product-type");
+    const current = typeSel.value;
+    typeSel.innerHTML = `<option value="">All</option>` + (data.productTypes || []).map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+    typeSel.value = current;
+    $("#hkex-fsp-summary").textContent =
+      `${hkexFspRows.length} rows · ${(data.contracts || []).length} contracts · as of ${fmtRelativeTime(data.asOf) || "just now"}`;
+    renderHkexFspTable();
+  } catch (e) {
+    status.style.display = "block";
+    status.textContent = `Couldn't load HKEX settlement prices: ${e.message}`;
+  }
+}
+
+wireSortableHeaders("#tab-hkex-settlement", () => hkexFspSort, (s) => { hkexFspSort = s; }, renderHkexFspTable);
+$("#hkex-fsp-search").addEventListener("input", renderHkexFspTable);
+$("#hkex-fsp-window").addEventListener("change", renderHkexFspTable);
+$("#hkex-fsp-product-type").addEventListener("change", renderHkexFspTable);
+$("#hkex-fsp-refresh").addEventListener("click", () => loadHkexFsp(true));
+
+// -- SGX Final Settlement Prices --
+let sgxFspLoaded = false;
+let sgxFspRows = [];
+let sgxFlexcRows = [];
+let sgxFspSort = { key: "contract", dir: "asc" };
+
+function sgxFspFilteredSorted() {
+  const q = ($("#sgx-fsp-search").value || "").trim().toLowerCase();
+  const sheet = $("#sgx-fsp-sheet").value;
+  const rows = sgxFspRows.filter(r => {
+    if (sheet && r.sheet !== sheet) return false;
+    if (q && !((r.contract || "").toLowerCase().includes(q) || (r.ticker || "").toLowerCase().includes(q))) return false;
+    return true;
+  });
+  return sortRows(rows, sgxFspSort.key, sgxFspSort.dir);
+}
+
+function renderSgxFspTable() {
+  const rows = sgxFspFilteredSorted();
+  $("#sgx-fsp-body").innerHTML = rows.map(r => `
+    <tr>
+      <td>${esc(r.productType ?? "")}</td>
+      <td>${esc(r.contract ?? "")}</td>
+      <td>${esc(r.ticker ?? "")}</td>
+      <td>${esc(r.contractMonth ?? "")}</td>
+      <td>${esc(r.fsp ?? "")}</td>
+      <td>${esc(r.fspDate ?? "")}</td>
+    </tr>
+  `).join("");
+  const status = $("#sgx-fsp-status");
+  status.style.display = rows.length ? "none" : "block";
+  if (!rows.length) status.textContent = sgxFspLoaded ? "No rows match your filters." : "Open this tab to load SGX settlement prices.";
+}
+
+function renderSgxFlexcTable() {
+  $("#sgx-flexc-empty").style.display = sgxFlexcRows.length ? "none" : "block";
+  $("#sgx-flexc-body").innerHTML = sgxFlexcRows.map(r => `
+    <tr><td>${esc(r.ticker ?? "")}</td><td>${esc(r.fsp ?? "")}</td><td>${esc(r.fspDate ?? "")}</td></tr>
+  `).join("");
+}
+
+async function loadSgxFsp(force) {
+  const status = $("#sgx-fsp-status");
+  status.style.display = "block";
+  status.textContent = "Loading SGX settlement prices…";
+  try {
+    const data = await api(`/api/settlement/sgx${force ? "?refresh=1" : ""}`, { timeoutMs: 45000 });
+    sgxFspLoaded = true;
+    sgxFspRows = data.rows || [];
+    sgxFlexcRows = (data.flexc && data.flexc.rows) || [];
+    const summary = $("#sgx-fsp-summary");
+    summary.textContent = `${sgxFspRows.length} rows · as of ${fmtRelativeTime(data.asOf) || "just now"}`;
+    if (data.sourceFileUrl) {
+      const link = document.createElement("a");
+      link.href = data.sourceFileUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "source file";
+      summary.append(" · ", link);
+    }
+    renderSgxFspTable();
+    renderSgxFlexcTable();
+  } catch (e) {
+    status.style.display = "block";
+    status.textContent = `Couldn't load SGX settlement prices: ${e.message}`;
+  }
+}
+
+wireSortableHeaders("#tab-sgx-settlement", () => sgxFspSort, (s) => { sgxFspSort = s; }, renderSgxFspTable);
+$("#sgx-fsp-search").addEventListener("input", renderSgxFspTable);
+$("#sgx-fsp-sheet").addEventListener("change", renderSgxFspTable);
+$("#sgx-fsp-refresh").addEventListener("click", () => loadSgxFsp(true));
+
+// -- SGX daily settlement prices (any past trading day, from SGX's own archive) --
+// Default the date picker to yesterday: today's file isn't published until
+// ~07:20 SGT the next morning, so "today" would always come back empty.
+(() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  $("#sgx-daily-date").value = d.toISOString().slice(0, 10);
+})();
+
+function renderSgxDailyTable(rows) {
+  $("#sgx-daily-body").innerHTML = (rows || []).map(r => `
+    <tr>
+      <td>${esc(r.ticker ?? "")}</td>
+      <td>${esc(r.series ?? "")}</td>
+      <td>${esc(r.contractMonth ?? "")}</td>
+      <td>${esc(r.settle ?? "")}</td>
+      <td>${esc(r.open ?? "")}</td>
+      <td>${esc(r.high ?? "")}</td>
+      <td>${esc(r.low ?? "")}</td>
+      <td>${esc(r.close ?? "")}</td>
+      <td>${esc(r.volume ?? "")}</td>
+      <td>${esc(r.openInterest ?? "")}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadSgxDaily() {
+  const dateVal = $("#sgx-daily-date").value;
+  const search = $("#sgx-daily-search").value.trim();
+  const status = $("#sgx-daily-status");
+  const summary = $("#sgx-daily-summary");
+  $("#sgx-daily-body").innerHTML = "";
+  summary.textContent = "";
+
+  if (!dateVal) {
+    status.style.display = "block";
+    status.textContent = "Pick a date above and press Load.";
+    return;
+  }
+  status.style.display = "block";
+  status.textContent = `Loading SGX daily settlement prices for ${dateVal}…`;
+
+  const params = new URLSearchParams({ date: dateVal });
+  if (search) params.set("search", search);
+
+  try {
+    const data = await api(`/api/settlement/sgx/daily?${params.toString()}`, { timeoutMs: 45000 });
+    if (data.note) {
+      status.style.display = "block";
+      status.textContent = data.note;
+      return;
+    }
+    status.style.display = "none";
+    const rows = data.rows || [];
+    summary.textContent = `${rows.length} row${rows.length === 1 ? "" : "s"} for ${data.tradeDate}`;
+    if (data.sourceFileUrl) {
+      const link = document.createElement("a");
+      link.href = data.sourceFileUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "source file";
+      summary.append(" · ", link);
+    }
+    renderSgxDailyTable(rows);
+  } catch (e) {
+    status.style.display = "block";
+    status.textContent = `Couldn't load SGX daily settlement prices: ${e.message}`;
+  }
+}
+
+$("#sgx-daily-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  loadSgxDaily();
+});
+
+// -- Eurex daily settlement prices --
+let eurexProductsLoaded = false;
+let eurexProducts = [];
+
+function eurexTradingDateToBusdate(raw) {
+  // Eurex's own "DD-MM-YYYY HH:MM" -> the "YYYYMMDD" the API's busdate param expects.
+  const m = (raw || "").match(/^(\d{2})-(\d{2})-(\d{4})/);
+  return m ? `${m[3]}${m[2]}${m[1]}` : null;
+}
+
+async function loadEurexProducts() {
+  eurexProductsLoaded = true;
+  try {
+    const data = await api("/api/settlement/eurex/products", { timeoutMs: 30000 });
+    eurexProducts = data.products || [];
+    $("#eurex-product-list").innerHTML = eurexProducts
+      .map(p => `<option value="${esc(p.code)}">${esc(p.name || "")}</option>`)
+      .join("");
+  } catch (e) {
+    // Non-fatal: the product code field still works by direct entry, just without autocomplete.
+  }
+}
+
+function renderEurexFspTable(rows) {
+  $("#eurex-fsp-body").innerHTML = (rows || []).map(r => `
+    <tr>
+      <td>${esc(r.dateIso || r.date || "")}</td>
+      <td>${esc(r.contractType ?? "")}</td>
+      <td>${esc(r.open ?? "")}</td>
+      <td>${esc(r.high ?? "")}</td>
+      <td>${esc(r.low ?? "")}</td>
+      <td>${esc(r.last ?? "")}</td>
+      <td>${esc(r.settlementPrice ?? "")}</td>
+      <td>${esc(r.volume ?? "")}</td>
+      <td>${esc(r.openInterest ?? "")}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadEurexFsp(force) {
+  const code = $("#eurex-product-code").value.trim().toUpperCase();
+  const status = $("#eurex-fsp-status");
+  const summary = $("#eurex-fsp-summary");
+  const resolveRow = $("#eurex-resolve-row");
+  resolveRow.style.display = "none";
+  $("#eurex-fsp-body").innerHTML = "";
+  summary.textContent = "";
+
+  if (!code) {
+    status.style.display = "block";
+    status.textContent = "Enter a product code above (e.g. FDAX) and press Load.";
+    return;
+  }
+  status.style.display = "block";
+  status.textContent = `Loading Eurex settlement prices for ${code}…`;
+
+  const busdate = eurexTradingDateToBusdate($("#eurex-trading-date").value);
+  const params = new URLSearchParams({ product: code });
+  if (busdate) params.set("busdate", busdate);
+  if (force) params.set("refresh", "1");
+
+  try {
+    const data = await api(`/api/settlement/eurex?${params.toString()}`, { timeoutMs: 45000 });
+    status.style.display = "none";
+    const dateSel = $("#eurex-trading-date");
+    const currentVal = dateSel.value;
+    const tradingDates = data.tradingDates || [];
+    dateSel.innerHTML = `<option value="">Latest</option>` + tradingDates.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+    dateSel.value = tradingDates.includes(currentVal) ? currentVal : "";
+    summary.textContent =
+      `${data.productCode || code} (${data.rows.length} contract month${data.rows.length === 1 ? "" : "s"}) · ` +
+      `underlying close ${data.underlyingClosingPrice ?? "N/A"} · as of ${fmtRelativeTime(data.asOf) || "just now"}`;
+    renderEurexFspTable(data.rows);
+  } catch (e) {
+    if (e.status === 404) {
+      status.style.display = "none";
+      resolveRow.style.display = "block";
+      $("#eurex-resolve-hint").textContent = e.message;
+    } else {
+      status.style.display = "block";
+      status.textContent = `Couldn't load Eurex settlement prices: ${e.message}`;
+    }
+  }
+}
+
+$("#eurex-product-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  loadEurexFsp(false);
+});
+$("#eurex-trading-date").addEventListener("change", () => loadEurexFsp(false));
+
+$("#eurex-resolve-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const code = $("#eurex-product-code").value.trim().toUpperCase();
+  const url = $("#eurex-resolve-url").value.trim();
+  const hint = $("#eurex-resolve-hint");
+  if (!code || !url) { hint.textContent = "Enter both a product code above and that product's Eurex page URL."; return; }
+  hint.textContent = "Resolving…";
+  try {
+    await api("/api/settlement/eurex/resolve", { method: "POST", body: JSON.stringify({ code, page_url: url }) });
+    $("#eurex-resolve-row").style.display = "none";
+    $("#eurex-resolve-url").value = "";
+    await loadEurexFsp(false);
+  } catch (e) {
+    hint.textContent = e.message;
+  }
+});
+
+// -- Eurex MSCI Futures final settlement prices --
+let eurexMsciLoaded = false;
+let eurexMsciRows = [];
+let eurexMsciDefaultExpiry = "";
+
+function renderEurexMsciTable() {
+  const q = ($("#eurex-msci-search").value || "").trim().toLowerCase();
+  const expiry = $("#eurex-msci-expiry").value || eurexMsciDefaultExpiry;
+  const rows = eurexMsciRows.filter(r =>
+    !q || (r.indexName || "").toLowerCase().includes(q) || (r.eurexCode || "").toLowerCase().includes(q)
+  );
+  $("#eurex-msci-body").innerHTML = rows.map(r => {
+    const fsp = (r.settlementPricesByExpiry || {})[expiry];
+    return `
+      <tr>
+        <td>${esc(r.indexName ?? "")}</td>
+        <td>${esc(r.region ?? "")}</td>
+        <td>${esc(r.indexType ?? "")}</td>
+        <td>${esc(r.currency ?? "")}</td>
+        <td>${esc(r.eurexCode ?? "")}</td>
+        <td>${fsp === undefined || fsp === null ? "N/A" : esc(fsp)}</td>
+      </tr>
+    `;
+  }).join("");
+  const status = $("#eurex-msci-status");
+  status.style.display = rows.length ? "none" : "block";
+  if (!rows.length) status.textContent = eurexMsciLoaded ? "No rows match your search." : "Open this tab to load MSCI settlement prices.";
+}
+
+async function loadEurexMsci(force) {
+  const status = $("#eurex-msci-status");
+  status.style.display = "block";
+  status.textContent = "Loading MSCI settlement prices…";
+  try {
+    const data = await api(`/api/settlement/eurex/msci${force ? "?refresh=1" : ""}`, { timeoutMs: 45000 });
+    eurexMsciLoaded = true;
+    eurexMsciRows = data.rows || [];
+    eurexMsciDefaultExpiry = data.defaultExpiry || "";
+    const sel = $("#eurex-msci-expiry");
+    sel.innerHTML = (data.expiries || []).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+    sel.value = eurexMsciDefaultExpiry;
+    renderEurexMsciTable();
+  } catch (e) {
+    status.style.display = "block";
+    status.textContent = `Couldn't load MSCI settlement prices: ${e.message}`;
+  }
+}
+
+$("#eurex-msci-search").addEventListener("input", renderEurexMsciTable);
+$("#eurex-msci-expiry").addEventListener("change", renderEurexMsciTable);
+$("#eurex-msci-refresh").addEventListener("click", () => loadEurexMsci(true));
+
+// ---- Chat ----
+// Persisted client-side (localStorage) so a page refresh, accidental close,
+// or browser crash doesn't wipe an in-progress conversation -- the backend
+// itself is stateless per request (see monitor/chat.py's docstring) and
+// relies entirely on the caller resending history each turn.
+const CHAT_STORAGE_KEY = "hkex-chat-state-v1";
+let chatHistory = [];
+let chatTranscript = []; // mirrors chat-log's bubbles, for re-render on load
+
+function saveChatState() {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ history: chatHistory, transcript: chatTranscript }));
+  } catch (e) { /* localStorage unavailable (private browsing, quota, etc.) -- chat still works, just not persisted */ }
+}
+
+function clearChatState() {
+  chatHistory = [];
+  chatTranscript = [];
+  $("#chat-log").innerHTML = "";
+  try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch (e) { /* ignore */ }
+}
+
+function restoreChatState() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || "null");
+  } catch (e) {
+    saved = null;
+  }
+  if (!saved || !Array.isArray(saved.transcript)) return;
+  chatHistory = saved.history || [];
+  chatTranscript = saved.transcript;
+  chatTranscript.forEach((turn, i) => {
+    const bubble = addBubble(turn.role, turn.text);
+    if (turn.role === "assistant") {
+      addToolChips(bubble, turn.tool_activity);
+      addSources(bubble, turn.sources);
+      addBloombergTable(bubble, turn.bloomberg_tables);
+      addFeedbackButton(bubble, i);
+    }
+  });
+}
+
+$("#chat-clear-btn").addEventListener("click", () => {
+  clearChatState();
+});
+
+function addBubble(role, text) {
+  const log = $("#chat-log");
+  const div = document.createElement("div");
+  div.className = "bubble " + role;
+  renderInlineBold(div, text);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+// Minimal, safe "**bold**" renderer: splits on literal "**" markers and
+// wraps alternating segments in a real <strong>, built with textContent/
+// createTextNode only (never innerHTML) -- so nothing in a reply (or in
+// raw user input) can ever be interpreted as markup, it just renders as
+// actual bold instead of showing literal asterisks.
+function renderInlineBold(container, text) {
+  const parts = text.split("**");
+  if (parts.length % 2 === 0) {
+    // Unbalanced "**" count -- don't guess which half is "bold", just
+    // show the raw text.
+    container.textContent = text;
+    return;
+  }
+  parts.forEach((part, i) => {
+    if (i % 2 === 1) {
+      const strong = document.createElement("strong");
+      strong.textContent = part;
+      container.appendChild(strong);
+    } else if (part) {
+      container.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
+function addToolChips(container, toolActivity) {
+  if (!toolActivity || !toolActivity.length) return;
+  const wrap = document.createElement("div");
+  toolActivity.forEach(t => {
+    const chip = document.createElement("span");
+    chip.className = "tool-chip";
+    chip.textContent = "🔧 " + t.tool;
+    wrap.appendChild(chip);
+  });
+  container.parentNode.insertBefore(wrap, container.nextSibling);
+}
+
+// ---- Chat feedback (thumbs-down) ----
+// Flagging a reply appends one JSON line server-side (data/chat_feedback.log)
+// with the COMPLETE turn: question, every tool call's raw args and raw result
+// (the transcript already persists these -- see chatTranscript), the reply,
+// prior conversation, and the user's note. Meant to be downloaded and handed
+// to an AI coding session to diagnose and fix. See monitor/chat_feedback.py.
+let chatFeedbackStats = { count: 0 };
+
+function renderChatFeedbackControls() {
+  const n = chatFeedbackStats.count || 0;
+  const countEl = $("#chat-feedback-count");
+  countEl.style.display = n ? "" : "none";
+  countEl.textContent = n ? `${n} flagged repl${n === 1 ? "y" : "ies"}` : "";
+  $("#chat-feedback-download-btn").style.display = n ? "" : "none";
+  $("#chat-feedback-clear-btn").style.display = n ? "" : "none";
+}
+
+async function loadChatFeedbackStats() {
+  try {
+    chatFeedbackStats = await api("/api/chat/feedback");
+  } catch (e) {
+    chatFeedbackStats = { count: 0 }; // controls just stay hidden; flagging itself still surfaces its own errors
+  }
+  renderChatFeedbackControls();
+}
+
+function addFeedbackButton(bubble, transcriptIndex) {
+  const turn = chatTranscript[transcriptIndex];
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "feedback-flag";
+  btn.title = "Flag this reply as wrong — logs the full turn (question, tool data, reply) for later review";
+  btn.textContent = turn.flagged ? "✓ flagged" : "👎";
+  btn.disabled = !!turn.flagged;
+  btn.addEventListener("click", async () => {
+    const note = prompt("What was wrong with this reply? (optional — leave blank to just flag it)");
+    if (note === null) return; // cancelled
+    // The turn's own question: nearest user entry above this reply.
+    let userIdx = -1;
+    for (let i = transcriptIndex - 1; i >= 0; i--) {
+      if (chatTranscript[i].role === "user") { userIdx = i; break; }
+    }
+    const prior = chatTranscript
+      .slice(0, Math.max(userIdx, 0))
+      .map(t => ({ role: t.role, text: t.text }))
+      .slice(-20);
+    btn.disabled = true;
+    try {
+      const res = await api("/api/chat/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          message: userIdx >= 0 ? chatTranscript[userIdx].text : "(question not captured)",
+          reply: turn.text,
+          note: note.trim() || null,
+          tool_activity: turn.tool_activity || [],
+          prior_transcript: prior,
+        }),
+      });
+      turn.flagged = true;
+      saveChatState();
+      btn.textContent = "✓ flagged";
+      chatFeedbackStats = res;
+      renderChatFeedbackControls();
+    } catch (e) {
+      btn.disabled = false;
+      $("#chat-msg").textContent = `Couldn't record feedback: ${e.message}`;
+    }
+  });
+  bubble.appendChild(btn);
+}
+
+$("#chat-feedback-download-btn").addEventListener("click", () => {
+  window.location.href = "/api/chat/feedback/download";
+});
+
+$("#chat-feedback-clear-btn").addEventListener("click", async () => {
+  const n = chatFeedbackStats.count || 0;
+  if (!confirm(`Delete the feedback log (${n} flagged repl${n === 1 ? "y" : "ies"})? Download it first if you still need it.`)) return;
+  try {
+    await api("/api/chat/feedback", { method: "DELETE" });
+    chatFeedbackStats = { count: 0 };
+    renderChatFeedbackControls();
+  } catch (e) {
+    $("#chat-msg").textContent = `Couldn't clear the feedback log: ${e.message}`;
+  }
+});
+
+function addSources(container, sources) {
+  if (!sources || !sources.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "sources-block";
+
+  const label = document.createElement("div");
+  label.className = "sources-label";
+  label.textContent = "📄 Sources";
+  wrap.appendChild(label);
+
+  sources.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "source-item";
+    const url = s.documentUrl || "";
+    if (/^https?:\/\//i.test(url)) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = s.title || url;
+      item.appendChild(link);
+    } else {
+      item.appendChild(document.createTextNode(s.title || "(untitled filing)"));
+    }
+    if (s.date) {
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "source-date";
+      dateSpan.textContent = " · " + s.date;
+      item.appendChild(dateSpan);
+    }
+    wrap.appendChild(item);
+  });
+
+  container.parentNode.insertBefore(wrap, container);
+}
+
+const BLOOMBERG_COLUMNS = [
+  ["ticker", "Security"],
+  ["DVD_SH_LAST", "Last Dividend / Share"],
+  ["BDVD_NEXT_PROJECTED_DVD", "Next Projected Dividend"],
+  ["DVD_EX_DT", "Ex-Dividend Date"],
+  ["DVD_DECLARED_DT", "Declared Date"],
+  ["BDVD_NEXT_EST_EX_DT", "Next Est. Ex-Date"],
+];
+
+function addBloombergTable(container, tables) {
+  if (!tables || !tables.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "sources-block";
+
+  const label = document.createElement("div");
+  label.className = "sources-label";
+  label.textContent = "📊 Bloomberg dividend data";
+  wrap.appendChild(label);
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  BLOOMBERG_COLUMNS.forEach(([, headerLabel]) => {
+    const th = document.createElement("th");
+    th.textContent = headerLabel;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  tables.forEach(row => {
+    const tr = document.createElement("tr");
+    BLOOMBERG_COLUMNS.forEach(([key]) => {
+      const td = document.createElement("td");
+      const val = row[key];
+      td.textContent = (val === null || val === undefined || val === "") ? "N/A" : String(val);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+
+  container.parentNode.insertBefore(wrap, container);
+}
+
+$("#chat-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const input = $("#chat-input");
+  const sendBtn = $("#chat-send-btn");
+  const errMsg = $("#chat-msg");
+  const text = input.value.trim();
+  if (!text) return;
+
+  errMsg.textContent = "";
+  addBubble("user", text);
+  chatTranscript.push({ role: "user", text });
+  saveChatState();
+  input.value = "";
+  input.disabled = true;
+  sendBtn.disabled = true;
+  const thinking = addBubble("thinking", "Thinking…");
+
+  try {
+    const res = await api("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({ message: text, history: chatHistory }),
+      timeoutMs: 240000,
+    });
+    chatHistory = res.messages || [];
+    thinking.remove();
+    const replyText = res.reply || "(no response)";
+    const bubble = addBubble("assistant", replyText);
+    addToolChips(bubble, res.tool_activity);
+    addSources(bubble, res.sources);
+    addBloombergTable(bubble, res.bloomberg_tables);
+    chatTranscript.push({
+      role: "assistant",
+      text: replyText,
+      tool_activity: res.tool_activity,
+      sources: res.sources,
+      bloomberg_tables: res.bloomberg_tables,
+    });
+    addFeedbackButton(bubble, chatTranscript.length - 1);
+    saveChatState();
+    // Refresh dashboard/watchlist data in case the assistant changed something.
+    loadTargets();
+    loadStatus();
+  } catch (e) {
+    thinking.remove();
+    errMsg.textContent = e.message;
+  } finally {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+});
+
+// ---- Settings ----
+function setSecretStatus(el, isSet) {
+  el.textContent = isSet ? "(currently set)" : "(not set)";
+}
+
+async function loadSettings() {
+  let s;
+  try {
+    s = await api("/api/settings");
+  } catch (e) {
+    $("#settings-msg").className = "msg error";
+    $("#settings-msg").textContent = "Couldn't load settings.";
+    return;
+  }
+  $("#s-deepseek-base").value = s.deepseek_base_url || "";
+  $("#s-deepseek-model").value = s.deepseek_model || "";
+  $("#s-deepseek-reasoning-model").value = s.deepseek_reasoning_model || "";
+  $("#s-tg-chat").value = s.telegram_chat_id || "";
+  $("#s-poll").value = s.poll_interval_seconds;
+  $("#s-lookback").value = s.scrape_lookback_days;
+  $("#s-retries").value = s.max_extraction_retries;
+  $("#s-race-poll").value = s.race_poll_interval_seconds;
+  $("#s-race-start").value = s.race_start_hour;
+  $("#s-race-end").value = s.race_end_hour;
+  $("#s-race-alert-threshold").value = s.race_alert_failure_threshold;
+  $("#s-race-alert-cooldown").value = s.race_alert_cooldown_seconds;
+  $("#s-chat-limit").value = s.chat_daily_message_limit;
+  $("#s-bbg-enabled").checked = !!s.bloomberg_enabled;
+  $("#s-bbg-url").value = s.bloomberg_bridge_url || "";
+
+  setSecretStatus($("#s-deepseek-key-status"), s.deepseek_api_key_set);
+  setSecretStatus($("#s-slack-status"), s.slack_webhook_set);
+  setSecretStatus($("#s-discord-status"), s.discord_webhook_set);
+  setSecretStatus($("#s-tg-token-status"), s.telegram_bot_token_set);
+  setSecretStatus($("#s-bbg-token-status"), s.bloomberg_token_set);
+}
+
+$("#settings-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("#settings-msg");
+  msg.textContent = "Saving…";
+  msg.className = "msg";
+
+  // Only send secret fields the user actually typed something into,
+  // so we never overwrite an already-configured key with blank.
+  const updates = {
+    deepseek_base_url: $("#s-deepseek-base").value.trim() || undefined,
+    deepseek_model: $("#s-deepseek-model").value.trim() || undefined,
+    deepseek_reasoning_model: $("#s-deepseek-reasoning-model").value.trim() || undefined,
+    telegram_chat_id: $("#s-tg-chat").value.trim() || undefined,
+    poll_interval_seconds: Number($("#s-poll").value) || undefined,
+    scrape_lookback_days: Number($("#s-lookback").value) || undefined,
+    max_extraction_retries: Number($("#s-retries").value) || undefined,
+    race_poll_interval_seconds: Number($("#s-race-poll").value) || undefined,
+    race_start_hour: $("#s-race-start").value !== "" ? Number($("#s-race-start").value) : undefined,
+    race_end_hour: $("#s-race-end").value !== "" ? Number($("#s-race-end").value) : undefined,
+    race_alert_failure_threshold: Number($("#s-race-alert-threshold").value) || undefined,
+    race_alert_cooldown_seconds: Number($("#s-race-alert-cooldown").value) || undefined,
+    chat_daily_message_limit: $("#s-chat-limit").value !== "" ? Number($("#s-chat-limit").value) : undefined,
+    bloomberg_enabled: $("#s-bbg-enabled").checked ? 1 : 0,
+    bloomberg_bridge_url: $("#s-bbg-url").value.trim() || undefined,
+  };
+  const secretFields = {
+    deepseek_api_key: "#s-deepseek-key",
+    slack_webhook_url: "#s-slack",
+    discord_webhook_url: "#s-discord",
+    telegram_bot_token: "#s-tg-token",
+    bloomberg_token: "#s-bbg-token",
+  };
+  for (const [key, sel] of Object.entries(secretFields)) {
+    const val = $(sel).value;
+    if (val) updates[key] = val;
+  }
+  Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
+
+  try {
+    await api("/api/settings", { method: "POST", body: JSON.stringify(updates) });
+    Object.keys(secretFields).forEach(key => { $(secretFields[key]).value = ""; });
+    msg.className = "msg success";
+    msg.textContent = "Saved.";
+    await loadSettings();
+    await loadStatus();
+  } catch (e) {
+    msg.className = "msg error";
+    msg.textContent = e.message;
+  }
+});
+
+$("#test-deepseek-btn").addEventListener("click", async () => {
+  const btn = $("#test-deepseek-btn");
+  const msg = $("#test-deepseek-msg");
+  btn.disabled = true;
+  msg.textContent = "Testing…";
+  msg.className = "msg";
+  try {
+    await api("/api/test-deepseek", { method: "POST" });
+    msg.textContent = "Working! DeepSeek responded successfully.";
+    msg.className = "msg success";
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = "msg error";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---- Init ----
+loadStatus();
+loadAlerts();
+loadActivity();
+loadTargets();
+loadSettings();
+loadDividends();
+restoreChatState();
+loadChatFeedbackStats();
+setInterval(() => { loadStatus(); loadAlerts(); loadDividends(); }, 15000);
+// Faster, dedicated cadence for the Activity log -- only while the
+// Dashboard tab is actually visible, same precedent as the Dividend
+// Watchlist's 6s self-rescheduling poll while generating.
+setInterval(() => {
+  if (!document.hidden && $("#tab-dashboard").classList.contains("active")) loadActivity();
+}, 5000);
+</script>
+
+</body>
+</html>

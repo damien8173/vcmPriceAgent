@@ -1,0 +1,12 @@
+openai>=1.30,<2.0
+pydantic>=2.6,<3.0
+requests>=2.31,<3.0
+python-dotenv>=1.0,<2.0
+fastapi>=0.110,<1.0
+uvicorn>=0.29,<1.0
+# Reads the settlement-price Excel workbooks published by SGX and Eurex
+# (see monitor/settlement.py) -- deterministic parsing, no LLM involved.
+openpyxl>=3.1,<4.0
+# Routes TLS verification through the OS trust store so the app works behind a
+# corporate proxy/VPN/antivirus that re-signs HTTPS (see monitor/_ssl_bootstrap.py).
+truststore>=0.9,<1.0
