@@ -24,10 +24,11 @@ Fly.io (Python FastAPI)
   ├── Scoring: pure Python rule engine (0–100, no LLM)
   └── Notifications: Slack / Discord / Telegram webhooks
 
-SurrealDB (Surreal Cloud — managed, free tier)
+Supabase (managed PostgreSQL)
   ├── exchange_filing     — raw HKEX filings cache
   ├── company_event       — LLM-extracted facts (board meetings, dividends, results)
-  └── dividend_watchlist  — daily scored rankings
+  ├── dividend_watchlist  — daily scored rankings
+  └── alert_history       — notification dispatch log
 ```
 
 **Key rule:** All business logic (HKEX scraping, LLM extraction, scoring, notifications) lives in Python on Fly.io. Next.js is UI + chat orchestration only. Chat LLM calls happen in Next.js (`/api/chat`) because it owns the streaming connection to the browser; tool calls within chat reach out to Fly.io for live data.
@@ -46,9 +47,13 @@ vcmPriceAgent/
 ├── tailwind.config.ts
 ├── .env.example                     # all required env vars documented
 │
+├── .github/
+│   └── workflows/
+│       └── supabase-migrations.yml  # auto-apply migrations on push to main
+│
 ├── app/                             # Next.js App Router
 │   ├── layout.tsx                   # nav shell
-│   ├── page.tsx                     # dashboard (tickers + upcoming dividends)
+│   ├── page.tsx                     # dashboard (targets + watchlist + alerts)
 │   ├── chat/page.tsx                # streaming chat UI
 │   └── api/
 │       ├── chat/route.ts            # LLM streaming endpoint with tool-calling
@@ -56,49 +61,44 @@ vcmPriceAgent/
 │       └── filings/route.ts         # proxy → Fly.io /dividends/upcoming
 │
 ├── lib/
-│   ├── supabase.ts                  # REPLACED by surreal.ts (todo)
-│   ├── supabase-server.ts           # REPLACED by surreal-server.ts (todo)
+│   ├── supabase.ts                  # browser Supabase client
+│   ├── supabase-server.ts           # server-side Supabase client (API routes)
 │   ├── flyio.ts                     # typed HTTP client for Fly.io API
 │   ├── llm.ts                       # DeepSeek client + system prompt
 │   └── tools.ts                     # tool definitions for chat
 │
 ├── types/index.ts                   # shared TypeScript types
 │
-├── supabase/migrations/             # REPLACED by surreal/schema.surql (todo)
+├── supabase/
+│   └── migrations/
+│       └── 001_initial_schema.sql   # full schema — edit here, auto-applied via CI
 │
 ├── python-service/                  # Fly.io deployment
-│   ├── main.py                      # FastAPI app entry point
-│   ├── fly.toml                     # Fly.io config (app: vcm-price-agent, region: sin)
+│   ├── main.py                      # FastAPI app entry point + scheduler
+│   ├── fly.toml                     # app: vcm-price-agent, region: sin, min 1 machine
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── monitor/                     # ← real source code (migrated from reference)
-│   │   ├── daemon.py                # scheduler + core pipeline
-│   │   ├── extractor.py             # LLM dividend classification
-│   │   ├── announcement_extractor.py
-│   │   ├── document_extractor.py    # PDF/HTML/Excel text extraction
-│   │   ├── hkex_search.py           # direct HKEX HTTP search
-│   │   ├── db.py                    # SurrealDB HTTP client
-│   │   ├── notifier.py              # Slack/Discord/Telegram
-│   │   ├── watchlist.py             # daily ranking orchestration
-│   │   ├── history.py               # SurrealDB persistence
-│   │   ├── features.py              # signal extraction for scoring
-│   │   ├── scoring.py               # rule-based scoring (pure Python)
-│   │   ├── registry.py              # JSON file management (targets, cache)
-│   │   ├── config.py                # env + settings.json config (cached)
-│   │   ├── chat.py                  # DeepSeek function-calling (internal)
-│   │   ├── board_meetings.py        # HKEXnews board meeting notices
-│   │   ├── activity.py              # structured event logging
-│   │   ├── diagnostics.py           # error logging
-│   │   └── ...
-│   └── data/                        # bind-mounted volume on Fly.io
-│       ├── hkex_targets.json        # watched tickers + target dates
-│       ├── notified_filings.json    # dedup cache (5000-entry rolling)
-│       ├── alert_history.json       # 200 most recent alerts
-│       ├── settings.json            # live user config (editable via dashboard)
+│   └── monitor/                     # ← ported from hkex-dividend-monitor/monitor/
+│       ├── daemon.py                # scheduler + core polling pipeline
+│       ├── extractor.py             # LLM dividend classification (two-tier)
+│       ├── announcement_extractor.py
+│       ├── document_extractor.py    # PDF/HTML/Excel text extraction
+│       ├── hkex_search.py           # direct HKEX HTTP search
+│       ├── db.py                    # Supabase client (replaces SurrealDB original)
+│       ├── notifier.py              # Slack/Discord/Telegram dispatch
+│       ├── watchlist.py             # daily ranking orchestration
+│       ├── history.py               # Supabase persistence layer
+│       ├── features.py              # signal extraction for scoring
+│       ├── scoring.py               # rule-based scoring (pure Python, no LLM)
+│       ├── registry.py              # JSON file management (targets, dedup cache)
+│       ├── config.py                # env + settings.json config (mtime-cached)
+│       ├── board_meetings.py        # HKEXnews board meeting notices
+│       ├── activity.py              # structured event logging
+│       ├── diagnostics.py           # error logging
 │       └── ...
 │
 └── hkex-dividend-monitor/           # reference source (read-only, do not run)
-    └── monitor/                     # original Python source to port from
+    └── monitor/                     # original Python to port from
 ```
 
 ---
@@ -106,47 +106,38 @@ vcmPriceAgent/
 ## Integration Checklist
 
 ### Phase 1 — Python service (Fly.io)
-- [ ] Copy real `monitor/` package from `hkex-dividend-monitor/monitor/` into `python-service/monitor/`
-- [ ] Merge `hkex-dividend-monitor/monitor/web.py` API routes into `python-service/main.py`
-- [ ] Update `python-service/requirements.txt` from `hkex-dividend-monitor/requirements.txt`
-- [ ] Wire up SurrealDB env vars (`SURREAL_ENDPOINT`, `SURREAL_NAMESPACE`, `SURREAL_DATABASE`, `SURREAL_USERNAME`, `SURREAL_PASSWORD`)
-- [ ] Remove `scraper_runner.py` dependency (use `hkex_search.py` direct HTTP instead)
-- [ ] Remove `bloomberg.py` / Bloomberg bridge (out of scope)
+- [ ] Copy `monitor/` package from `hkex-dividend-monitor/monitor/` into `python-service/monitor/`
+- [ ] Rewrite `db.py` to use `supabase-py` instead of SurrealDB HTTP client
+- [ ] Rewrite `history.py` persistence calls to use Supabase (PostgREST / raw SQL)
+- [ ] Merge `web.py` API routes into `python-service/main.py`
+- [ ] Update `requirements.txt` (base on `hkex-dividend-monitor/requirements.txt`, swap `surrealdb` → `supabase`)
+- [ ] Remove `scraper_runner.py` dependency (use `hkex_search.py` direct HTTP only)
+- [ ] Remove `bloomberg.py` (out of scope — requires Bloomberg Terminal)
 - [ ] Remove `settlement*.py` / `sgx_daily.py` (out of scope)
-- [ ] Test daemon starts and polls correctly
-- [ ] Test notifications fire correctly
+- [ ] Test daemon starts and polls HKEX correctly
+- [ ] Test LLM extraction pipeline works end-to-end
+- [ ] Test notifications fire on a matched filing
 
-### Phase 2 — Database (SurrealDB)
-- [ ] Create Surreal Cloud project (free tier)
-- [ ] Replace `supabase/migrations/001_initial_schema.sql` with `surreal/schema.surql`
-  - Tables: `exchange_filing`, `company_event`, `dividend_watchlist`
-  - Match schema from `hkex-dividend-monitor/monitor/db.py` and `history.py`
-- [ ] Replace `lib/supabase.ts` + `lib/supabase-server.ts` with `lib/surreal.ts`
-- [ ] Update `app/api/tickers/route.ts` to use SurrealDB client
-- [ ] Update `.env.example` with new SurrealDB vars
+### Phase 2 — Database (Supabase)
+- [ ] Create Supabase project (free tier, Singapore region)
+- [ ] Run `supabase/migrations/001_initial_schema.sql` via SQL Editor
+- [ ] Add `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_ID` as GitHub repo secrets
+- [ ] Verify GitHub Actions workflow auto-applies future migrations on push
+- [ ] Update Supabase env vars in both Vercel and Fly.io
 
 ### Phase 3 — Next.js frontend
-- [ ] Update `lib/tools.ts` tool definitions to match real Fly.io endpoints
-  - `get_filings`, `get_upcoming_dividends`, `get_watched_tickers`
-  - `get_watchlist` (daily scoring), `get_alerts`, `get_board_meetings`
-- [ ] Update `app/page.tsx` dashboard to show real data:
-  - Active targets (ticker + target date + status)
-  - Today's watchlist rankings (score, band, reasons)
-  - Recent alerts feed
-- [ ] Update `app/chat/page.tsx` — chat UI is largely done, verify streaming works end-to-end
-- [ ] Add targets management page (`app/targets/page.tsx`)
-  - Add ticker + date pairs
-  - View active / inactive targets
-- [ ] Add settings page (`app/settings/page.tsx`)
-  - Edit poll intervals, notification webhooks, LLM model
-  - Proxy POST to Fly.io `/api/settings`
+- [ ] Update `lib/tools.ts` definitions to match real Fly.io endpoints
+- [ ] Update `app/page.tsx` dashboard — active targets, watchlist rankings, recent alerts
+- [ ] Add `app/targets/page.tsx` — add/remove ticker+date watchlist targets
+- [ ] Add `app/settings/page.tsx` — edit notification webhooks, poll intervals (proxies to Fly.io)
+- [ ] Verify chat streaming works end-to-end with real tool calls
 
 ### Phase 4 — Deployment
-- [ ] Deploy Python service to Fly.io (`flyctl deploy` from `python-service/`)
-- [ ] Set all Fly.io secrets (SurrealDB, DeepSeek, notifications, INTERNAL_SECRET)
-- [ ] Deploy Next.js to Vercel (import from GitHub)
-- [ ] Set all Vercel env vars (SurrealDB, DeepSeek, Fly.io URL + secret)
-- [ ] Smoke test: add a ticker, trigger a poll, confirm filing appears in dashboard
+- [ ] Deploy Python service: `flyctl deploy` from `python-service/`
+- [ ] Set all Fly.io secrets (Supabase, DeepSeek, notifications, INTERNAL_SECRET)
+- [ ] Deploy Next.js: import repo in Vercel dashboard
+- [ ] Set all Vercel env vars
+- [ ] Smoke test: add a ticker+date target → trigger poll → confirm filing in dashboard → confirm notification sent
 
 ---
 
@@ -155,13 +146,11 @@ vcmPriceAgent/
 ### Next.js (Vercel)
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_SURREAL_URL` | Surreal Cloud endpoint |
-| `SURREAL_USER` | SurrealDB username |
-| `SURREAL_PASS` | SurrealDB password |
-| `SURREAL_NS` | Namespace (e.g. `hkex`) |
-| `SURREAL_DB` | Database (e.g. `monitor`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-id>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
 | `FLYIO_API_URL` | `https://vcm-price-agent.fly.dev` |
-| `FLYIO_API_SECRET` | Shared secret for internal calls |
+| `FLYIO_API_SECRET` | Shared secret — must match Fly.io `INTERNAL_SECRET` |
 | `LLM_API_KEY` | DeepSeek API key |
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
 | `LLM_MODEL` | `deepseek-chat` |
@@ -169,35 +158,43 @@ vcmPriceAgent/
 ### Python service (Fly.io secrets)
 | Variable | Description |
 |---|---|
-| `SURREAL_ENDPOINT` | Surreal Cloud HTTP endpoint |
-| `SURREAL_NAMESPACE` | e.g. `hkex` |
-| `SURREAL_DATABASE` | e.g. `monitor` |
-| `SURREAL_USERNAME` | SurrealDB username |
-| `SURREAL_PASSWORD` | SurrealDB password |
+| `SUPABASE_URL` | `https://<project-id>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
 | `LLM_API_KEY` | DeepSeek API key |
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
 | `LLM_MODEL` | `deepseek-chat` (fast tier) |
 | `LLM_REASONING_MODEL` | `deepseek-reasoner` (escalation tier) |
-| `INTERNAL_SECRET` | Shared secret (validates calls from Next.js) |
+| `INTERNAL_SECRET` | Validates calls from Next.js — generate with `openssl rand -hex 32` |
 | `SLACK_WEBHOOK_URL` | Optional |
 | `DISCORD_WEBHOOK_URL` | Optional |
 | `TELEGRAM_BOT_TOKEN` | Optional |
 | `TELEGRAM_CHAT_ID` | Optional |
 
+### GitHub repo secrets (for Supabase CI)
+| Secret | Description |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | From supabase.com/dashboard/account/tokens |
+| `SUPABASE_PROJECT_ID` | Project reference ID (Settings → General) |
+| `SUPABASE_DB_PASSWORD` | Database password set at project creation |
+
 ---
 
 ## Key Design Decisions
 
-**SurrealDB over Supabase** — the reference codebase already uses SurrealDB (HTTP-only client in `db.py`). Adopting it avoids a rewrite of the database layer and aligns both services on the same DB.
+**Supabase over SurrealDB** — managed PostgreSQL with a polished dashboard, proven JS and Python SDKs, and a free tier generous enough for this workload. The reference code used SurrealDB but its `db.py` is an isolated module — swapping it for `supabase-py` is contained.
+
+**db.py is the only file that changes for the DB swap** — all other monitor modules call functions in `db.py` and `history.py`. Rewriting those two files is the full scope of the database migration.
 
 **No scraper subprocess** — the reference code supports two HKEX ingestion paths: a subprocess CLI (`hkex-scraper`) and direct HTTP search (`hkex_search.py`). We use direct HTTP only — no external binary dependency.
 
 **No Bloomberg** — Bloomberg bridge requires a local Bloomberg Terminal. Excluded from scope.
 
-**No settlement prices** — SGX/Eurex settlement price modules are out of scope for this project.
+**No settlement prices** — SGX/Eurex settlement price modules are out of scope.
 
 **Chat LLM in Next.js, not Python** — streaming to the browser is cleaner when the LLM call originates in Next.js. Python exposes data via REST; the chat tool-calling loop lives in `app/api/chat/route.ts`.
 
-**Config lives in Python** — `config.py` with settings.json + env var precedence is the source of truth for daemon behaviour. The Next.js settings page proxies writes to the Python service.
+**Config source of truth is Python** — `config.py` with `settings.json` + env var precedence controls daemon behaviour. The Next.js settings page proxies writes to Fly.io `/api/settings`.
 
-**Fly.io min_machines_running = 1** — the daemon must stay alive for continuous polling. Configured in `fly.toml`.
+**Fly.io `min_machines_running = 1`** — the daemon must stay alive for continuous polling. Configured in `fly.toml`.
+
+**Migrations are code** — all schema changes go in `supabase/migrations/` and are applied automatically via GitHub Actions on push to `main`. Never edit the schema manually in the Supabase dashboard.

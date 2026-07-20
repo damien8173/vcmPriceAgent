@@ -8,22 +8,22 @@ Watches Hong Kong Stock Exchange (HKEX) filings for tickers you care about, extr
 ┌─────────────────────────────────┐     ┌──────────────────────────────────┐
 │  Vercel (Next.js)               │     │  Fly.io (Python / FastAPI)       │
 │                                 │     │                                  │
-│  Dashboard  ─── /api/tickers ──►│────►│  GET /tickers                    │
-│  Chat UI    ─── /api/chat    ──►│     │  GET /filings?ticker=0005.HK     │
+│  Dashboard  ─── /api/tickers ──►│────►│  GET /targets                    │
+│  Chat UI    ─── /api/chat    ──►│     │  GET /filings                    │
 │             ─── /api/filings ──►│────►│  GET /dividends/upcoming         │
 │                                 │     │  POST /poll                      │
-│  /api/chat calls LLM (DeepSeek) │     │                                  │
-│  LLM calls tools → Fly.io API   │     │  Scheduler: polls HKEX every 15m │
+│  /api/chat calls DeepSeek LLM   │     │                                  │
+│  LLM tool calls → Fly.io API    │     │  Daemon: polls HKEX every 3 min  │
 └─────────────────────────────────┘     │  Extracts dividends with AI      │
                │                        │  Sends Slack/Discord/Telegram    │
                ▼                        └────────────┬─────────────────────┘
       ┌─────────────────┐                            │
-      │  Supabase       │◄───────────────────────────┘
-      │  (PostgreSQL)   │
-      │  tickers        │
-      │  filings        │
-      │  dividends      │
-      │  alerts         │
+      │  Supabase        │◄───────────────────────────┘
+      │  (PostgreSQL)    │
+      │  exchange_filing │
+      │  company_event   │
+      │  dividend_watchlist│
+      │  alert_history   │
       └─────────────────┘
 ```
 
@@ -32,7 +32,7 @@ Watches Hong Kong Stock Exchange (HKEX) filings for tickers you care about, extr
 - Node.js 18+
 - Python 3.12+
 - Accounts: [Supabase](https://supabase.com), [Vercel](https://vercel.com), [Fly.io](https://fly.io)
-- API key: [DeepSeek](https://platform.deepseek.com) (or any OpenAI-compatible LLM)
+- API key: [DeepSeek](https://platform.deepseek.com)
 
 ---
 
@@ -41,31 +41,78 @@ Watches Hong Kong Stock Exchange (HKEX) filings for tickers you care about, extr
 ### 1a. Create a project
 
 1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) → **New project**
-2. Choose a region close to Singapore or Hong Kong
-3. Save the database password somewhere safe
+2. Choose **Singapore** region (closest to Hong Kong)
+3. Save the database password — you'll need it for the GitHub Actions secret
 
-### 1b. Run the schema migration
+### 1b. Run the initial schema
 
-1. In the Supabase dashboard, open **SQL Editor**
+1. In the Supabase dashboard → **SQL Editor**
 2. Paste the contents of `supabase/migrations/001_initial_schema.sql`
 3. Click **Run**
 
 ### 1c. Get your API keys
 
 Go to **Settings → API** and copy:
-- `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
-- `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (keep this secret — server-side only)
+
+| Key | Used for |
+|---|---|
+| Project URL | `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_URL` |
+| `anon` / public key | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| `service_role` key | `SUPABASE_SERVICE_ROLE_KEY` — server-side only, never expose to browser |
+
+Get your **Project ID** from Settings → General (the reference ID, e.g. `abcdefghijklmnop`).
 
 ---
 
-## 2. Local Development
+## 2. Supabase GitHub Integration (auto-migrations)
+
+Every time you push a new file to `supabase/migrations/`, the GitHub Action automatically applies it to your Supabase project. You never need to run SQL manually again.
+
+### 2a. Get a Supabase access token
+
+1. Go to [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens)
+2. Click **Generate new token** → name it `github-actions` → copy it
+
+### 2b. Add GitHub repo secrets
+
+Go to your GitHub repo → **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| Secret name | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Token from step 2a |
+| `SUPABASE_PROJECT_ID` | Your project reference ID (e.g. `abcdefghijklmnop`) |
+| `SUPABASE_DB_PASSWORD` | Database password from project creation |
+
+### 2c. How to add a new migration
+
+Create a new numbered file in `supabase/migrations/`:
+
+```bash
+# Example: add a new column
+touch supabase/migrations/002_add_ticker_notes.sql
+```
+
+Write your SQL, then commit and push to `main`:
+
+```bash
+git add supabase/migrations/002_add_ticker_notes.sql
+git commit -m "Add notes column to targets"
+git push
+```
+
+The GitHub Action runs automatically and applies the migration. Check progress in **Actions** tab on GitHub.
+
+> **Rule:** Never edit the schema directly in the Supabase dashboard. All changes go through migration files so the schema stays in sync with the code.
+
+---
+
+## 3. Local Development
 
 ### Next.js frontend
 
 ```bash
 cp .env.example .env.local
-# fill in your keys in .env.local
+# fill in your Supabase and DeepSeek keys
 
 npm install
 npm run dev
@@ -77,133 +124,190 @@ npm run dev
 ```bash
 cd python-service
 cp .env.example .env
-# fill in your keys in .env
+# fill in your keys
 
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 uvicorn main:app --reload --port 8080
 # → http://localhost:8080
 ```
 
-Set `FLYIO_API_URL=http://localhost:8080` in your `.env.local` to point the Next.js app at the local Python service during development.
+Set `FLYIO_API_URL=http://localhost:8080` in your `.env.local` to point Next.js at the local Python service.
 
 ---
 
-## 3. Fly.io Deployment (Python service)
+## 4. Fly.io Deployment (Python service)
 
-### 3a. Install the Fly CLI
+### 4a. Install the Fly CLI
 
 ```bash
-brew install flyctl     # macOS
+brew install flyctl          # macOS
 # or: curl -L https://fly.io/install.sh | sh
 ```
 
-### 3b. Authenticate and create the app
+### 4b. Sign up and authenticate
+
+```bash
+flyctl auth signup           # new account
+# or
+flyctl auth login            # existing account
+```
+
+A browser window opens for authentication. Fly.io requires a credit card on file but stays within free limits for this workload (1 shared-CPU VM, 256MB RAM).
+
+### 4c. Create the app
 
 ```bash
 cd python-service
-flyctl auth login
-flyctl launch --no-deploy   # creates the app; fly.toml is already present
+flyctl launch --no-deploy
 ```
 
-### 3c. Set secrets
+When prompted:
+- **App name:** `vcm-price-agent` (or accept generated name)
+- **Region:** `sin` (Singapore) — closest to Hong Kong
+- **Postgres / Redis:** No (we use Supabase)
+
+This creates the app on Fly.io. The `fly.toml` is already configured.
+
+### 4d. Set secrets
+
+Generate a random internal secret first:
+
+```bash
+openssl rand -hex 32
+# → copy the output, use as INTERNAL_SECRET below
+```
+
+Set all secrets in one command:
 
 ```bash
 flyctl secrets set \
-  SUPABASE_URL="https://<id>.supabase.co" \
-  SUPABASE_SERVICE_ROLE_KEY="<key>" \
-  LLM_API_KEY="<deepseek-key>" \
-  INTERNAL_SECRET="<random-string>"
+  SUPABASE_URL="https://<project-id>.supabase.co" \
+  SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+  LLM_API_KEY="<deepseek-api-key>" \
+  LLM_BASE_URL="https://api.deepseek.com" \
+  LLM_MODEL="deepseek-chat" \
+  LLM_REASONING_MODEL="deepseek-reasoner" \
+  INTERNAL_SECRET="<your-generated-secret>"
 ```
 
-Generate a random secret with: `openssl rand -hex 32`
+Optionally add notification webhooks:
 
-### 3d. Deploy
+```bash
+flyctl secrets set \
+  SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..." \
+  DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..." \
+  TELEGRAM_BOT_TOKEN="<token>" \
+  TELEGRAM_CHAT_ID="<chat-id>"
+```
+
+### 4e. Deploy
 
 ```bash
 flyctl deploy
 ```
 
-Your service will be live at `https://vcm-price-agent.fly.dev`. Check `flyctl logs` if anything fails.
+First deploy takes ~3 minutes (builds Docker image). Subsequent deploys are faster.
 
-### 3e. Verify
+### 4f. Verify
 
 ```bash
+flyctl status               # check machine is running
+flyctl logs                 # tail live logs
 curl https://vcm-price-agent.fly.dev/health
 # → {"status":"ok"}
 ```
 
----
-
-## 4. Vercel Deployment (Next.js)
-
-### 4a. Push to GitHub
+### 4g. Useful Fly.io commands
 
 ```bash
-git init
-git add .
-git commit -m "initial commit"
-gh repo create vcm-price-agent --public --source=. --push
+flyctl logs                  # live log stream
+flyctl status                # machine health
+flyctl ssh console           # shell into the running container
+flyctl secrets list          # list secret names (not values)
+flyctl deploy                # redeploy after code changes
+flyctl scale show            # check VM size and count
 ```
 
-### 4b. Import in Vercel
+### 4h. Keeping the machine alive
+
+The `fly.toml` sets `min_machines_running = 1` and `auto_stop_machines = false`. This ensures the polling daemon stays running continuously. Fly.io free tier includes enough allowance for one always-on small VM.
+
+---
+
+## 5. Vercel Deployment (Next.js)
+
+### 5a. Push to GitHub
+
+```bash
+git add .
+git commit -m "ready to deploy"
+git push
+```
+
+### 5b. Import in Vercel
 
 1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import your GitHub repository
-3. Framework: **Next.js** (auto-detected)
+2. Click **Import** next to your `vcmPriceAgent` repository
+3. Framework preset: **Next.js** (auto-detected)
+4. Click **Deploy** — first deploy will fail because env vars aren't set yet, that's fine
 
-### 4c. Set environment variables in Vercel
+### 5c. Set environment variables
 
-In **Settings → Environment Variables**, add:
+In Vercel → your project → **Settings → Environment Variables**, add:
 
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | from Supabase |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | from Supabase |
-| `FLYIO_API_URL` | `https://hkex-monitor-service.fly.dev` |
-| `FLYIO_API_SECRET` | same random string used in Fly.io |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-id>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key from Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | service role key from Supabase |
+| `FLYIO_API_URL` | `https://vcm-price-agent.fly.dev` |
+| `FLYIO_API_SECRET` | same value as Fly.io `INTERNAL_SECRET` |
 | `LLM_API_KEY` | DeepSeek API key |
 | `LLM_BASE_URL` | `https://api.deepseek.com` |
 | `LLM_MODEL` | `deepseek-chat` |
 
-### 4d. Deploy
+### 5d. Redeploy
 
-Click **Deploy** — Vercel builds and deploys automatically. Future pushes to `main` trigger redeploys.
+In Vercel → **Deployments** → click the three dots on the latest deployment → **Redeploy**.
+
+Future pushes to `main` trigger automatic redeployments.
 
 ---
 
-## 5. Notification Setup (optional)
+## 6. Notification Setup (optional)
 
 ### Slack
-1. Create an app at [api.slack.com/apps](https://api.slack.com/apps)
-2. Enable **Incoming Webhooks** and add a webhook to a channel
-3. Add the URL as `SLACK_WEBHOOK_URL` in Fly.io secrets
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App → From scratch**
+2. Enable **Incoming Webhooks** → **Add New Webhook to Workspace** → choose a channel
+3. Copy the webhook URL → add as `SLACK_WEBHOOK_URL` in Fly.io secrets
 
 ### Discord
-1. In your server, go to **Channel Settings → Integrations → Webhooks**
-2. Create a webhook and copy the URL
-3. Add as `DISCORD_WEBHOOK_URL` in Fly.io secrets
+1. In your Discord server → channel **Settings → Integrations → Webhooks → New Webhook**
+2. Copy the URL → add as `DISCORD_WEBHOOK_URL` in Fly.io secrets
 
 ### Telegram
-1. Message [@BotFather](https://t.me/BotFather) → `/newbot`
-2. Copy the bot token
-3. Start a chat with your bot, then fetch your chat ID:
-   `https://api.telegram.org/bot<token>/getUpdates`
-4. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to Fly.io secrets
+1. Message [@BotFather](https://t.me/BotFather) → `/newbot` → follow prompts → copy the bot token
+2. Start a conversation with your bot, then get your chat ID:
+   ```
+   https://api.telegram.org/bot<token>/getUpdates
+   ```
+   Look for `"chat":{"id":...}` in the response
+3. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to Fly.io secrets
 
 ---
 
-## 6. Adding Watched Tickers
+## 7. Adding Watched Targets
 
-Use the dashboard at your Vercel URL, or via the API directly:
+Use the dashboard, or via the API:
 
 ```bash
+# Add a ticker with a target ex-date
 curl -X POST https://<your-app>.vercel.app/api/tickers \
   -H "Content-Type: application/json" \
-  -d '{"symbol": "0005.HK", "name": "HSBC Holdings"}'
+  -d '{"symbol": "0005.HK", "name": "HSBC Holdings", "target_date": "2026-08-01"}'
 ```
 
 ---
@@ -216,22 +320,22 @@ vcmPriceAgent/
 │   ├── page.tsx            # Dashboard
 │   ├── chat/page.tsx       # Chat interface
 │   └── api/
-│       ├── chat/route.ts   # LLM streaming endpoint
+│       ├── chat/route.ts   # LLM streaming + tool-calling
 │       ├── tickers/route.ts
 │       └── filings/route.ts
 ├── lib/
 │   ├── supabase.ts         # Browser Supabase client
 │   ├── supabase-server.ts  # Server-side Supabase client
 │   ├── flyio.ts            # Fly.io API wrapper
-│   ├── llm.ts              # LLM client (DeepSeek)
-│   └── tools.ts            # Tool definitions for chat
-├── types/index.ts          # Shared TypeScript types
-├── supabase/migrations/    # SQL schema
+│   ├── llm.ts              # DeepSeek LLM client
+│   └── tools.ts            # Chat tool definitions
+├── types/index.ts
+├── supabase/migrations/    # SQL schema — edit here, auto-applied via GitHub Actions
+├── .github/workflows/
+│   └── supabase-migrations.yml
 └── python-service/         # Fly.io Python backend
-    ├── main.py             # FastAPI app + scheduler
-    ├── monitor/
-    │   ├── hkex.py         # HKEX filing scraper
-    │   └── extractor.py    # AI dividend extraction
+    ├── main.py
+    ├── monitor/            # HKEX monitoring logic
     ├── Dockerfile
     └── fly.toml
 ```
