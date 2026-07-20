@@ -1,6 +1,3 @@
-# local reference repos — not part of this project
-hkex-dividend-monitor/
-
 # deps
 node_modules/
 .pnp
