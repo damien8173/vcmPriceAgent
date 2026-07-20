@@ -126,12 +126,12 @@ Generate a random secret with: `openssl rand -hex 32`
 flyctl deploy
 ```
 
-Your service will be live at `https://hkex-monitor-service.fly.dev`. Check `flyctl logs` if anything fails.
+Your service will be live at `https://vcm-price-agent.fly.dev`. Check `flyctl logs` if anything fails.
 
 ### 3e. Verify
 
 ```bash
-curl https://hkex-monitor-service.fly.dev/health
+curl https://vcm-price-agent.fly.dev/health
 # → {"status":"ok"}
 ```
 

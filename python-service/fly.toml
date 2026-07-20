@@ -1,4 +1,4 @@
-app = "hkex-monitor-service"
+app = "vcm-price-agent"
 primary_region = "sin"   # Singapore — closest to HK
 
 [build]
